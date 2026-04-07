@@ -12,6 +12,7 @@ Standalone HTML canvas games. No build step, no dependencies, no server needed.
 | `balls.html` | Ball Pit Simulator |
 | `shoot.html` | Slingshot 3D |
 | `marble.html` | Marble Machine 2D |
+| `liquid.html` | Liquid Simulation |
 
 ## Usage
 
