@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="icon" href="icon.svg" type="image/svg+xml" />
+        <title>Mechanical Linkage Sim</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                background: #1a1a2e;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                color: #eee;
+            }
+            canvas {
+                display: block;
+                cursor: crosshair;
+            }
+            #home-link {
+                position: fixed;
+                top: 16px;
+                right: 16px;
+                color: #eee;
+                text-decoration: none;
+                font-size: 14px;
+                background: rgba(0, 0, 0, 0.5);
+                padding: 8px 14px;
+                border-radius: 8px;
+                transition: background 0.2s;
+                z-index: 100;
+            }
+            #home-link:hover {
+                background: rgba(0, 0, 0, 0.7);
+            }
+            #toolbar {
+                position: fixed;
+                top: 16px;
+                left: 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                z-index: 100;
+            }
+            .panel {
+                background: rgba(22, 33, 62, 0.9);
+                padding: 12px;
+                border-radius: 8px;
+                border: 1px solid #4e4e6a;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            }
+            .panel h3 {
+                font-size: 14px;
+                margin-bottom: 8px;
+                color: #f5a623;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+            .btn-group {
+                display: flex;
+                gap: 5px;
+                flex-wrap: wrap;
+            }
+            button {
+                background: #0f3460;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 13px;
+                transition: background 0.2s;
+            }
+            button:hover {
+                background: #16213e;
+            }
+            button.active {
+                background: #e94560;
+            }
+
+            #inspector {
+                position: fixed;
+                bottom: 16px;
+                left: 16px;
+                width: 240px;
+                display: none;
+            }
+            .control-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin: 8px 0;
+                font-size: 12px;
+            }
+            input[type="range"] {
+                width: 100px;
+                accent-color: #e94560;
+            }
+            input[type="number"] {
+                width: 50px;
+                background: #16213e;
+                border: 1px solid #4e4e6a;
+                color: white;
+                padding: 2px;
+            }
+            .hint {
+                position: fixed;
+                bottom: 16px;
+                right: 16px;
+                font-size: 12px;
+                color: rgba(255, 255, 255, 0.5);
+                pointer-events: none;
+            }
+        </style>
+    </head>
+    <body>
+        <a id="home-link" href="index.html">Home</a>
+
+        <div id="toolbar">
+            <div class="panel">
+                <h3>Add Components</h3>
+                <div class="btn-group">
+                    <button id="addCrankBtn">Add Crank</button>
+                    <button id="addJointBtn">Add Joint</button>
+                    <button id="addLinkBtn">Add Linkage</button>
+                    <button id="jansenBtn" style="background: #6a5acd">
+                        Jansen
+                    </button>
+                    <button id="stopCranksBtn" style="background: #553">
+                        Stop Cranks
+                    </button>
+                    <button id="saveBtn" style="background: #353">
+                        Save State
+                    </button>
+                    <button id="clearTracesBtn" style="background: #335">
+                        Clear Traces
+                    </button>
+                    <button id="clearBtn" style="background: #533">
+                        Clear All
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="inspector" class="panel">
+            <h3 id="inspectTitle">Inspector</h3>
+            <div id="crankControls">
+                <div class="control-row">
+                    <label>RPM</label>
+                    <input
+                        type="range"
+                        id="crankRPM"
+                        min="-120"
+                        max="120"
+                        step="1"
+                        value="30"
+                    />
+                    <span id="rpmVal">30</span>
+                </div>
+                <div class="control-row">
+                    <label>Arm (cm)</label>
+                    <input
+                        type="range"
+                        id="crankLen"
+                        min="10"
+                        max="200"
+                        step="1"
+                        value="50"
+                    />
+                    <span id="lenVal">50</span>
+                </div>
+            </div>
+            <div id="linkageControls">
+                <div class="control-row">
+                    <label>Length (cm)</label>
+                    <input
+                        type="range"
+                        id="linkLen"
+                        min="20"
+                        max="500"
+                        step="1"
+                        value="150"
+                    />
+                    <span id="linkLenVal">150</span>
+                </div>
+            </div>
+            <div id="jointControls">
+                <div class="control-row">
+                    <label>Fixed Position</label>
+                    <input type="checkbox" id="jointFixed" />
+                </div>
+                <div class="control-row">
+                    <label>Trace Path</label>
+                    <input type="checkbox" id="jointTrace" />
+                </div>
+                <div class="control-row">
+                    <label>Constraint</label>
+                    <select id="jointConstraint">
+                        <option value="none">None</option>
+                        <option value="x">Slot X (Slide Y)</option>
+                        <option value="y">Slot Y (Slide X)</option>
+                    </select>
+                </div>
+            </div>
+            <button
+                id="deleteBtn"
+                style="width: 100%; margin-top: 10px; background: #e94560"
+            >
+                Delete
+            </button>
+        </div>
+
+        <div class="hint">
+            Drag joints to move • Click component to inspect • Linkages must
+            connect two joints
+        </div>
+
+        <canvas id="canvas"></canvas>
+
+        <script>
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            // Physics / Simulation State
+            const CM_TO_PX = 2;
+            let joints = []; // { x, y, fixed, id }
+            let links = []; // { a: jointIndex, b: jointIndex, length, isCrank, angle, rpm }
+            let selectedId = null;
+            let selectedType = null; // 'joint', 'link'
+            let draggingJoint = null;
+            let mode = "select"; // 'select', 'addLink'
+            let tempLinkStart = null;
+
+            class Joint {
+                constructor(x, y, fixed = false) {
+                    this.x = x;
+                    this.y = y;
+                    this.fixed = fixed;
+                    this.constraint = "none"; // 'none', 'x', 'y'
+                    this.startX = x;
+                    this.startY = y;
+                    this.trace = false;
+                    this.path = [];
+                    this.id = Math.random().toString(36).substr(2, 9);
+                }
+            }
+
+            class Link {
+                constructor(a, b, length, isCrank = false) {
+                    this.a = a; // Joint object
+                    this.b = b; // Joint object
+                    this.length = length;
+                    this.isCrank = isCrank;
+                    this.rpm = 30;
+                    this.angle = 0;
+                    this.id = Math.random().toString(36).substr(2, 9);
+                }
+            }
+
+            // Initial Setup
+            function init() {
+                if (loadState()) return;
+
+                const cx = canvas.width / 2;
+                const cy = canvas.height / 2;
+
+                // Default Crank
+                const j1 = new Joint(cx, cy, true);
+                const j2 = new Joint(cx + 50 * CM_TO_PX, cy, false);
+                joints.push(j1, j2);
+                links.push(new Link(j1, j2, 50 * CM_TO_PX, true));
+            }
+
+            function saveState() {
+                const state = {
+                    joints: joints.map((j) => ({
+                        x: j.x,
+                        y: j.y,
+                        fixed: j.fixed,
+                        constraint: j.constraint,
+                        startX: j.startX,
+                        startY: j.startY,
+                        trace: j.trace,
+                        id: j.id,
+                    })),
+                    links: links.map((l) => ({
+                        aId: l.a.id,
+                        bId: l.b.id,
+                        length: l.length,
+                        isCrank: l.isCrank,
+                        rpm: 0, // Set to 0 as requested
+                        angle: l.angle,
+                        id: l.id,
+                    })),
+                };
+                localStorage.setItem(
+                    "mechanics_sim_state",
+                    JSON.stringify(state),
+                );
+            }
+
+            function loadState() {
+                const saved = localStorage.getItem("mechanics_sim_state");
+                if (!saved) return false;
+                try {
+                    const state = JSON.parse(saved);
+                    joints = state.joints.map((sj) => {
+                        const j = new Joint(sj.x, sj.y, sj.fixed);
+                        j.id = sj.id;
+                        j.trace = sj.trace;
+                        j.constraint = sj.constraint || "none";
+                        j.startX = sj.startX !== undefined ? sj.startX : sj.x;
+                        j.startY = sj.startY !== undefined ? sj.startY : sj.y;
+                        return j;
+                    });
+                    links = state.links
+                        .map((sl) => {
+                            const ja = joints.find((j) => j.id === sl.aId);
+                            const jb = joints.find((j) => j.id === sl.bId);
+                            if (!ja || !jb) return null;
+                            const l = new Link(ja, jb, sl.length, sl.isCrank);
+                            l.rpm = sl.rpm;
+                            l.angle = sl.angle;
+                            l.id = sl.id;
+                            return l;
+                        })
+                        .filter((l) => l !== null);
+                    return true;
+                } catch (e) {
+                    console.error("Failed to load state", e);
+                    return false;
+                }
+            }
+
+            function intersectCircles(x1, y1, r1, x2, y2, r2, sign = 1) {
+                const d = getDist(x1, y1, x2, y2);
+                if (d > r1 + r2 || d < Math.abs(r1 - r2))
+                    return { x: x1, y: y1 };
+                const a = (r1 ** 2 - r2 ** 2 + d ** 2) / (2 * d);
+                const h = Math.sqrt(Math.max(0, r1 ** 2 - a ** 2));
+                const x0 = x1 + (a * (x2 - x1)) / d;
+                const y0 = y1 + (a * (y2 - y1)) / d;
+                return {
+                    x: x0 + (sign * h * (y2 - y1)) / d,
+                    y: y0 - (sign * h * (x2 - x1)) / d,
+                };
+            }
+
+            function getDist(x1, y1, x2, y2) {
+                return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+            }
+
+            function update() {
+                // 1. Move Cranks
+                links.forEach((l) => {
+                    if (l.isCrank) {
+                        const rps = l.rpm / 60;
+                        const deltaTheta = (rps * 2 * Math.PI) / 60; // Assuming 60fps
+                        l.angle += deltaTheta;
+
+                        l.b.x = l.a.x + Math.cos(l.angle) * l.length;
+                        l.b.y = l.a.y + Math.sin(l.angle) * l.length;
+                    }
+                });
+
+                // 2. Solve Linkage Constraints (Verlet-style relaxation)
+                // We run multiple iterations for stability
+                for (let i = 0; i < 10; i++) {
+                    links.forEach((l) => {
+                        if (l.isCrank) return; // Crank length is absolute, handled by angle
+
+                        const dx = l.b.x - l.a.x;
+                        const dy = l.b.y - l.a.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        const diff = (l.length - dist) / dist;
+
+                        const offsetX = dx * diff * 0.5;
+                        const offsetY = dy * diff * 0.5;
+
+                        if (!l.a.fixed) {
+                            l.a.x -= offsetX;
+                            l.a.y -= offsetY;
+                        }
+                        if (!l.b.fixed) {
+                            l.b.x += offsetX;
+                            l.b.y += offsetY;
+                        }
+                    });
+
+                    // Enforce joint constraints
+                    joints.forEach((j) => {
+                        if (j.fixed) return;
+                        if (j.constraint === "x") {
+                            j.x = j.startX;
+                        } else if (j.constraint === "y") {
+                            j.y = j.startY;
+                        }
+                    });
+                }
+
+                // 3. Update Trace Paths
+                joints.forEach((j) => {
+                    if (j.trace) {
+                        j.path.push({ x: j.x, y: j.y });
+                        if (j.path.length > 1000) j.path.shift();
+                    } else if (j.path.length > 0) {
+                        j.path = [];
+                    }
+                });
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Draw Grid
+                ctx.strokeStyle = "#2a2a40";
+                ctx.lineWidth = 1;
+                for (let x = 0; x < canvas.width; x += 50) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, canvas.height);
+                    ctx.stroke();
+                }
+                for (let y = 0; y < canvas.height; y += 50) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(canvas.width, y);
+                    ctx.stroke();
+                }
+
+                // Draw Slots
+                joints.forEach((j) => {
+                    if (j.constraint === "x" || j.constraint === "y") {
+                        ctx.beginPath();
+                        if (j.constraint === "x") {
+                            ctx.moveTo(j.startX, 0);
+                            ctx.lineTo(j.startX, canvas.height);
+                        } else {
+                            ctx.moveTo(0, j.startY);
+                            ctx.lineTo(canvas.width, j.startY);
+                        }
+                        ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+                        ctx.lineWidth = 20;
+                        ctx.stroke();
+                        ctx.strokeStyle = "rgba(79, 172, 254, 0.2)";
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
+                });
+
+                // Draw Paths
+                joints.forEach((j) => {
+                    if (j.trace && j.path.length > 1) {
+                        ctx.beginPath();
+                        ctx.moveTo(j.path[0].x, j.path[0].y);
+                        for (let i = 1; i < j.path.length; i++) {
+                            ctx.lineTo(j.path[i].x, j.path[i].y);
+                        }
+                        ctx.strokeStyle = "rgba(233, 69, 96, 0.4)";
+                        ctx.lineWidth = 1.5;
+                        ctx.setLineDash([4, 4]);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+                });
+
+                // Draw Links
+                links.forEach((l) => {
+                    ctx.beginPath();
+                    ctx.moveTo(l.a.x, l.a.y);
+                    ctx.lineTo(l.b.x, l.b.y);
+
+                    const isSelected =
+                        selectedType === "link" && selectedId === l.id;
+                    ctx.strokeStyle = l.isCrank ? "#f5a623" : "#4facfe";
+                    if (isSelected) ctx.strokeStyle = "#e94560";
+
+                    ctx.lineWidth = isSelected ? 6 : 4;
+                    ctx.lineCap = "round";
+                    ctx.stroke();
+
+                    // Draw crank rotation path
+                    if (l.isCrank) {
+                        ctx.beginPath();
+                        ctx.arc(l.a.x, l.a.y, l.length, 0, Math.PI * 2);
+                        ctx.strokeStyle = "rgba(245, 166, 35, 0.1)";
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                    }
+                });
+
+                // Draw Joints
+                joints.forEach((j) => {
+                    ctx.beginPath();
+                    ctx.arc(j.x, j.y, 6, 0, Math.PI * 2);
+                    ctx.fillStyle = j.fixed ? "#e94560" : "#fff";
+                    ctx.fill();
+
+                    if (j.fixed) {
+                        ctx.strokeStyle = "#fff";
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
+                });
+
+                // Draw Temp Link
+                if (tempLinkStart) {
+                    ctx.beginPath();
+                    ctx.moveTo(tempLinkStart.x, tempLinkStart.y);
+                    ctx.lineTo(mousePos.x, mousePos.y);
+                    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+
+            let mousePos = { x: 0, y: 0 };
+
+            canvas.addEventListener("mousedown", (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                // Check for joint click
+                let hitJoint = joints.find((j) => getDist(x, y, j.x, j.y) < 15);
+
+                if (hitJoint) {
+                    if (mode === "addLink") {
+                        if (!tempLinkStart) {
+                            tempLinkStart = hitJoint;
+                        } else {
+                            if (tempLinkStart !== hitJoint) {
+                                const dist = getDist(
+                                    tempLinkStart.x,
+                                    tempLinkStart.y,
+                                    hitJoint.x,
+                                    hitJoint.y,
+                                );
+                                links.push(
+                                    new Link(tempLinkStart, hitJoint, dist),
+                                );
+                            }
+                            tempLinkStart = null;
+                            mode = "select";
+                            document
+                                .getElementById("addLinkBtn")
+                                .classList.remove("active");
+                        }
+                        return;
+                    }
+                    draggingJoint = hitJoint;
+                    selectObject("joint", hitJoint.id);
+                    return;
+                }
+
+                // Check for link click
+                let hitLink = links.find((l) => {
+                    const d = distToSegment({ x, y }, l.a, l.b);
+                    return d < 10;
+                });
+
+                if (hitLink) {
+                    selectObject("link", hitLink.id);
+                } else {
+                    selectObject(null, null);
+                }
+            });
+
+            function distToSegment(p, v, w) {
+                const l2 = getDist(v.x, v.y, w.x, w.y) ** 2;
+                if (l2 == 0) return getDist(p.x, p.y, v.x, v.y);
+                let t =
+                    ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) /
+                    l2;
+                t = Math.max(0, Math.min(1, t));
+                return getDist(
+                    p.x,
+                    p.y,
+                    v.x + t * (w.x - v.x),
+                    v.y + t * (w.y - v.y),
+                );
+            }
+
+            canvas.addEventListener("mousemove", (e) => {
+                const rect = canvas.getBoundingClientRect();
+                mousePos.x = e.clientX - rect.left;
+                mousePos.y = e.clientY - rect.top;
+
+                if (draggingJoint) {
+                    draggingJoint.x = mousePos.x;
+                    draggingJoint.y = mousePos.y;
+                    draggingJoint.startX = mousePos.x;
+                    draggingJoint.startY = mousePos.y;
+                }
+            });
+
+            window.addEventListener("mouseup", () => {
+                draggingJoint = null;
+            });
+
+            document
+                .getElementById("jointTrace")
+                .addEventListener("change", (e) => {
+                    if (selectedType === "joint") {
+                        const joint = joints.find((j) => j.id === selectedId);
+                        if (joint) {
+                            joint.trace = e.target.checked;
+                            if (!joint.trace) joint.path = [];
+                        }
+                    }
+                });
+
+            document
+                .getElementById("jointConstraint")
+                .addEventListener("change", (e) => {
+                    if (selectedType === "joint") {
+                        const joint = joints.find((j) => j.id === selectedId);
+                        if (joint) {
+                            joint.constraint = e.target.value;
+                            joint.startX = joint.x;
+                            joint.startY = joint.y;
+                        }
+                    }
+                });
+
+            function selectObject(type, id) {
+                selectedType = type;
+                selectedId = id;
+                const inspector = document.getElementById("inspector");
+                const crankCtrl = document.getElementById("crankControls");
+                const linkCtrl = document.getElementById("linkageControls");
+                const jointCtrl = document.getElementById("jointControls");
+
+                if (!type) {
+                    inspector.style.display = "none";
+                    return;
+                }
+
+                inspector.style.display = "block";
+
+                if (type === "link") {
+                    const link = links.find((l) => l.id === id);
+                    document.getElementById("inspectTitle").textContent =
+                        link.isCrank ? "Crank Inspector" : "Linkage Inspector";
+                    crankCtrl.style.display = link.isCrank ? "block" : "none";
+                    linkCtrl.style.display = !link.isCrank ? "block" : "none";
+                    jointCtrl.style.display = "none";
+
+                    if (link.isCrank) {
+                        document.getElementById("crankRPM").value = link.rpm;
+                        document.getElementById("rpmVal").textContent =
+                            link.rpm;
+                        document.getElementById("crankLen").value =
+                            link.length / CM_TO_PX;
+                        document.getElementById("lenVal").textContent =
+                            Math.round(link.length / CM_TO_PX);
+                    } else {
+                        document.getElementById("linkLen").value =
+                            link.length / CM_TO_PX;
+                        document.getElementById("linkLenVal").textContent =
+                            Math.round(link.length / CM_TO_PX);
+                    }
+                } else {
+                    const joint = joints.find((j) => j.id === id);
+                    document.getElementById("inspectTitle").textContent =
+                        "Joint Inspector";
+                    crankCtrl.style.display = "none";
+                    linkCtrl.style.display = "none";
+                    jointCtrl.style.display = "block";
+                    document.getElementById("jointFixed").checked = joint.fixed;
+                    document.getElementById("jointTrace").checked = joint.trace;
+                    document.getElementById("jointConstraint").value =
+                        joint.constraint;
+                }
+            }
+
+            // UI Handlers
+            document
+                .getElementById("addCrankBtn")
+                .addEventListener("click", () => {
+                    const cx = canvas.width / 2 + (Math.random() - 0.5) * 100;
+                    const cy = canvas.height / 2 + (Math.random() - 0.5) * 100;
+                    const j1 = new Joint(cx, cy, true);
+                    const j2 = new Joint(cx + 50 * CM_TO_PX, cy, false);
+                    joints.push(j1, j2);
+                    links.push(new Link(j1, j2, 50 * CM_TO_PX, true));
+                });
+
+            document
+                .getElementById("addJointBtn")
+                .addEventListener("click", () => {
+                    const cx = canvas.width / 2 + (Math.random() - 0.5) * 100;
+                    const cy = canvas.height / 2 + (Math.random() - 0.5) * 100;
+                    const j = new Joint(cx, cy, false);
+                    joints.push(j);
+                    selectObject("joint", j.id);
+                });
+
+            document
+                .getElementById("addLinkBtn")
+                .addEventListener("click", (e) => {
+                    mode = "addLink";
+                    e.target.classList.add("active");
+                    tempLinkStart = null;
+                });
+
+            document
+                .getElementById("jansenBtn")
+                .addEventListener("click", () => {
+                    const s = 5; // Scale factor
+                    const cx = canvas.width / 2;
+                    const cy = canvas.height / 2;
+
+                    // Fixed Pivot O and Crank Center M
+                    // From image: M is 38.0 right and 7.8 down from O
+                    const O = new Joint(cx - 50, cy - 50, true);
+                    const M = new Joint(O.x + 38 * s, O.y + 7.8 * s, true);
+                    const C = new Joint(M.x + 15 * s, M.y, false); // Initial crank position
+
+                    // Triangle 1: O(41.5) & C(50) -> j1 (Top)
+                    const p1 = intersectCircles(
+                        O.x,
+                        O.y,
+                        41.5 * s,
+                        C.x,
+                        C.y,
+                        50 * s,
+                        1,
+                    );
+                    const j1 = new Joint(p1.x, p1.y, false);
+
+                    // Triangle 2: O(39.3) & C(61.9) -> j2 (Middle)
+                    const p2 = intersectCircles(
+                        O.x,
+                        O.y,
+                        39.3 * s,
+                        C.x,
+                        C.y,
+                        61.9 * s,
+                        -1,
+                    );
+                    const j2 = new Joint(p2.x, p2.y, false);
+
+                    // Triangle 3: O(40.1) & j1(55.8) -> j3 (Left)
+                    const p3 = intersectCircles(
+                        O.x,
+                        O.y,
+                        40.1 * s,
+                        j1.x,
+                        j1.y,
+                        55.8 * s,
+                        1,
+                    );
+                    const j3 = new Joint(p3.x, p3.y, false);
+
+                    // Triangle 4: j2(49) & j3(36.7) -> j5 (Base)
+                    const p5 = intersectCircles(
+                        j2.x,
+                        j2.y,
+                        49 * s,
+                        j3.x,
+                        j3.y,
+                        36.7 * s,
+                        -1,
+                    );
+                    const j5 = new Joint(p5.x, p5.y, false);
+
+                    // Triangle 5: j3(39.4) & j5(65.7) -> j4 (Foot)
+                    const p4 = intersectCircles(
+                        j3.x,
+                        j3.y,
+                        39.4 * s,
+                        j5.x,
+                        j5.y,
+                        65.7 * s,
+                        1,
+                    );
+                    const j4 = new Joint(p4.x, p4.y, false);
+
+                    joints.push(O, M, C, j1, j2, j3, j4, j5);
+
+                    const crank = new Link(M, C, 15 * s, true);
+                    crank.rpm = 30;
+                    links.push(crank);
+
+                    links.push(new Link(O, j1, 41.5 * s));
+                    links.push(new Link(C, j1, 50 * s));
+                    links.push(new Link(O, j2, 39.3 * s));
+                    links.push(new Link(C, j2, 61.9 * s));
+                    links.push(new Link(O, j3, 40.1 * s));
+                    links.push(new Link(j1, j3, 55.8 * s));
+                    links.push(new Link(j2, j5, 49 * s));
+                    links.push(new Link(j3, j5, 36.7 * s));
+                    links.push(new Link(j3, j4, 39.4 * s));
+                    links.push(new Link(j5, j4, 65.7 * s));
+
+                    j4.trace = true;
+                    selectObject("link", crank.id);
+                });
+
+            document
+                .getElementById("stopCranksBtn")
+                .addEventListener("click", () => {
+                    links.forEach((l) => {
+                        if (l.isCrank) l.rpm = 0;
+                    });
+                    // Refresh inspector if a crank is selected
+                    if (selectedType === "link") {
+                        const link = links.find((l) => l.id === selectedId);
+                        if (link && link.isCrank) {
+                            document.getElementById("crankRPM").value = 0;
+                            document.getElementById("rpmVal").textContent = 0;
+                        }
+                    }
+                });
+
+            document.getElementById("saveBtn").addEventListener("click", () => {
+                saveState();
+                alert("State saved! Crank speeds set to 0 in save.");
+            });
+
+            document
+                .getElementById("clearTracesBtn")
+                .addEventListener("click", () => {
+                    joints.forEach((j) => (j.path = []));
+                });
+
+            document
+                .getElementById("clearBtn")
+                .addEventListener("click", () => {
+                    joints = [];
+                    links = [];
+                    selectObject(null, null);
+                });
+
+            document
+                .getElementById("crankRPM")
+                .addEventListener("input", (e) => {
+                    if (selectedType === "link") {
+                        const link = links.find((l) => l.id === selectedId);
+                        if (link && link.isCrank) {
+                            link.rpm = parseInt(e.target.value);
+                            document.getElementById("rpmVal").textContent =
+                                link.rpm;
+                        }
+                    }
+                });
+
+            document
+                .getElementById("crankLen")
+                .addEventListener("input", (e) => {
+                    if (selectedType === "link") {
+                        const link = links.find((l) => l.id === selectedId);
+                        if (link && link.isCrank) {
+                            link.length = parseInt(e.target.value) * CM_TO_PX;
+                            document.getElementById("lenVal").textContent =
+                                e.target.value;
+                        }
+                    }
+                });
+
+            document
+                .getElementById("linkLen")
+                .addEventListener("input", (e) => {
+                    if (selectedType === "link") {
+                        const link = links.find((l) => l.id === selectedId);
+                        if (link && !link.isCrank) {
+                            link.length = parseInt(e.target.value) * CM_TO_PX;
+                            document.getElementById("linkLenVal").textContent =
+                                e.target.value;
+                        }
+                    }
+                });
+
+            document
+                .getElementById("jointFixed")
+                .addEventListener("change", (e) => {
+                    if (selectedType === "joint") {
+                        const joint = joints.find((j) => j.id === selectedId);
+                        if (joint) {
+                            joint.fixed = e.target.checked;
+                        }
+                    }
+                });
+
+            document
+                .getElementById("deleteBtn")
+                .addEventListener("click", () => {
+                    if (selectedType === "link") {
+                        links = links.filter((l) => l.id !== selectedId);
+                    } else if (selectedType === "joint") {
+                        // Remove joint and all connected links
+                        const joint = joints.find((j) => j.id === selectedId);
+                        links = links.filter(
+                            (l) => l.a !== joint && l.b !== joint,
+                        );
+                        joints = joints.filter((j) => j.id !== selectedId);
+                    }
+                    selectObject(null, null);
+                });
+
+            function loop() {
+                update();
+                draw();
+                requestAnimationFrame(loop);
+            }
+
+            window.addEventListener("resize", () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            });
+
+            init();
+            loop();
+        </script>
+    </body>
+</html>

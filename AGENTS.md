@@ -20,6 +20,7 @@ Flat playground of standalone HTML canvas games. No build step, no dependencies,
 | `shoot.html` | Slingshot 3D (finished) |
 | `marble.html` | Marble Machine 2D |
 | `liquid.html` | Liquid Simulation |
+| `mechanics.html` | Mechanics Simulation |
 
 ## Rules
 
