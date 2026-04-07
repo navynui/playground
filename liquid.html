@@ -1,259 +1,381 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" href="icon.svg" type="image/svg+xml">
-    <title>Liquid Simulation</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: #1a1a2e;
-            color: #eee;
-            font-family: system-ui, -apple-system, sans-serif;
-            height: 100vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        canvas {
-            background: #0f0f1a;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            border-radius: 4px;
-            cursor: grab;
-        }
-        canvas:active { cursor: grabbing; }
-        #ui {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 20px;
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            backdrop-filter: blur(5px);
-            border: 1px solid rgba(255,255,255,0.1);
-            user-select: none;
-        }
-        .control-group { display: flex; flex-direction: column; gap: 5px; }
-        label { font-size: 0.9rem; color: #aaa; }
-        select, input {
-            background: #333;
-            color: white;
-            border: none;
-            padding: 8px;
-            border-radius: 4px;
-            outline: none;
-        }
-        #home-link {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            color: white;
-            text-decoration: none;
-            background: rgba(255,255,255,0.1);
-            padding: 10px 20px;
-            border-radius: 8px;
-            transition: background 0.2s;
-        }
-        #home-link:hover { background: rgba(255,255,255,0.2); }
-    </style>
-</head>
-<body>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="icon" href="icon.svg" type="image/svg+xml" />
+        <title>Liquid Simulation</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                background: #1a1a2e;
+                color: #eee;
+                font-family:
+                    system-ui,
+                    -apple-system,
+                    sans-serif;
+                height: 100vh;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+            }
+            canvas {
+                background: #0f0f1a;
+                box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+                border-radius: 4px;
+                cursor: grab;
+            }
+            canvas:active {
+                cursor: grabbing;
+            }
+            #ui {
+                position: fixed;
+                top: 20px;
+                left: 20px;
+                background: rgba(0, 0, 0, 0.7);
+                padding: 20px;
+                border-radius: 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+                backdrop-filter: blur(5px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                user-select: none;
+            }
+            .control-group {
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+            label {
+                font-size: 0.9rem;
+                color: #aaa;
+            }
+            select,
+            input {
+                background: #333;
+                color: white;
+                border: none;
+                padding: 8px;
+                border-radius: 4px;
+                outline: none;
+            }
+            #home-link {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                color: white;
+                text-decoration: none;
+                background: rgba(255, 255, 255, 0.1);
+                padding: 10px 20px;
+                border-radius: 8px;
+                transition: background 0.2s;
+            }
+            #home-link:hover {
+                background: rgba(255, 255, 255, 0.2);
+            }
+        </style>
+    </head>
+    <body>
+        <a id="home-link" href="index.html">Home</a>
 
-<a id="home-link" href="index.html">Home</a>
+        <div id="ui">
+            <div class="control-group">
+                <label>Liquid Type</label>
+                <select id="liquidType">
+                    <option value="water">Water</option>
+                    <option value="oil">Oil</option>
+                    <option value="honey">Honey</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Gravity (<span id="gravityVal">9.8</span>)</label>
+                <input
+                    type="range"
+                    id="gravitySlider"
+                    min="0"
+                    max="30"
+                    step="0.5"
+                    value="9.8"
+                />
+            </div>
+            <div style="font-size: 0.8rem; color: #666">
+                Drag container to rotate/tilt
+            </div>
+        </div>
 
-<div id="ui">
-    <div class="control-group">
-        <label>Liquid Type</label>
-        <select id="liquidType">
-            <option value="water">Water</option>
-            <option value="oil">Oil</option>
-            <option value="honey">Honey</option>
-        </select>
-    </div>
-    <div class="control-group">
-        <label>Gravity (<span id="gravityVal">9.8</span>)</label>
-        <input type="range" id="gravitySlider" min="0" max="30" step="0.5" value="9.8">
-    </div>
-    <div style="font-size: 0.8rem; color: #666;">Drag container to rotate/tilt</div>
-</div>
+        <canvas id="canvas"></canvas>
 
-<canvas id="canvas"></canvas>
+        <script>
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+            const typeSelect = document.getElementById("liquidType");
+            const gravitySlider = document.getElementById("gravitySlider");
+            const gravityVal = document.getElementById("gravityVal");
 
-<script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    const typeSelect = document.getElementById('liquidType');
-    const gravitySlider = document.getElementById('gravitySlider');
-    const gravityVal = document.getElementById('gravityVal');
+            const LIQUIDS = {
+                water: {
+                    color: "rgba(0, 150, 255, 0.6)",
+                    viscosity: 0.1,
+                    density: 1.0,
+                    stickiness: 0,
+                    wallSlide: 1.0,
+                },
+                oil: {
+                    color: "rgba(255, 200, 0, 0.6)",
+                    viscosity: 0.3,
+                    density: 0.8,
+                    stickiness: 0.01,
+                    wallSlide: 0.9,
+                },
+                honey: {
+                    color: "rgba(255, 120, 0, 0.8)",
+                    viscosity: 0.6,
+                    density: 1.4,
+                    stickiness: 0.015,
+                    wallSlide: 0.8,
+                },
+            };
 
-    const LIQUIDS = {
-        water: { color: 'rgba(0, 150, 255, 0.6)', viscosity: 0.1, density: 1.0 },
-        oil: { color: 'rgba(255, 200, 0, 0.6)', viscosity: 0.3, density: 0.8 },
-        honey: { color: 'rgba(255, 120, 0, 0.8)', viscosity: 0.8, density: 1.4 }
-    };
+            let width, height;
+            let container = {
+                w: 400,
+                h: 300,
+                angle: 0,
+                targetAngle: 0,
+            };
 
-    let width, height;
-    let container = {
-        w: 400,
-        h: 300,
-        angle: 0,
-        targetAngle: 0
-    };
+            // Position Based Dynamics (PBD) with spatial hashing
+            const PARTICLE_COUNT = 1500;
+            const particles = [];
+            let gravity = 9.8;
+            const PARTICLE_RADIUS = 3.5;
+            const SPACING = PARTICLE_RADIUS * 2;
 
-    // Particle-based simulation (Simple SPH-ish or grid-less particles)
-    const PARTICLE_COUNT = 600;
-    const particles = [];
-    let gravity = 9.8;
-
-    class Particle {
-        constructor() {
-            this.reset();
-        }
-        reset() {
-            this.x = (Math.random() - 0.5) * container.w * 0.8;
-            this.y = (Math.random() - 0.5) * container.h * 0.8;
-            this.vx = 0;
-            this.vy = 0;
-            this.radius = 6;
-        }
-    }
-
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-        particles.push(new Particle());
-    }
-
-    function resize() {
-        width = window.innerWidth;
-        height = window.innerHeight;
-        canvas.width = width;
-        canvas.height = height;
-    }
-
-    window.addEventListener('resize', resize);
-    resize();
-
-    let isDragging = false;
-    let lastMouseX = 0;
-
-    canvas.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        lastMouseX = e.clientX;
-    });
-
-    window.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-            const dx = e.clientX - lastMouseX;
-            container.targetAngle += dx * 0.01;
-            lastMouseX = e.clientX;
-        }
-    });
-
-    window.addEventListener('mouseup', () => isDragging = false);
-
-    function update() {
-        const liquid = LIQUIDS[typeSelect.value];
-        gravity = parseFloat(gravitySlider.value);
-        gravityVal.textContent = gravity.toFixed(1);
-
-        // Smoothly rotate container
-        container.angle += (container.targetAngle - container.angle) * 0.1;
-
-        // Effective gravity vector in local container space
-        const gx = Math.sin(container.angle) * gravity;
-        const gy = Math.cos(container.angle) * gravity;
-
-        const dt = 0.16;
-        const friction = 1.0 - liquid.viscosity;
-
-        for (let i = 0; i < particles.length; i++) {
-            const p = particles[i];
-
-            // Apply gravity
-            p.vx += gx * dt;
-            p.vy += gy * dt;
-
-            // Apply viscosity (friction)
-            p.vx *= friction;
-            p.vy *= friction;
-
-            // Update position
-            p.x += p.vx;
-            p.y += p.vy;
-
-            // Boundary collisions (local space)
-            const hw = container.w / 2 - p.radius;
-            const hh = container.h / 2 - p.radius;
-
-            if (p.x > hw) { p.x = hw; p.vx *= -0.2; }
-            if (p.x < -hw) { p.x = -hw; p.vx *= -0.2; }
-            if (p.y > hh) { p.y = hh; p.vy *= -0.2; }
-            if (p.y < -hh) { p.y = -hh; p.vy *= -0.2; }
-
-            // Simple particle-particle repulsion for "volume"
-            for (let j = i + 1; j < particles.length; j++) {
-                const p2 = particles[j];
-                const dx = p2.x - p.x;
-                const dy = p2.y - p.y;
-                const distSq = dx * dx + dy * dy;
-                const minDist = p.radius * 2;
-
-                if (distSq < minDist * minDist && distSq > 0.01) {
-                    const dist = Math.sqrt(distSq);
-                    const force = (minDist - dist) / dist * 0.5;
-                    const nx = dx * force;
-                    const ny = dy * force;
-
-                    p.vx -= nx;
-                    p.vy -= ny;
-                    p2.vx += nx;
-                    p2.vy += ny;
+            class Particle {
+                constructor() {
+                    this.reset();
+                }
+                reset() {
+                    this.x = (Math.random() - 0.5) * (container.w - 20);
+                    this.y = Math.random() * (container.h / 2 - 20);
+                    this.px = this.x;
+                    this.py = this.y;
+                    this.vx = 0;
+                    this.vy = 0;
                 }
             }
-        }
-    }
 
-    function draw() {
-        ctx.clearRect(0, 0, width, height);
-        const liquid = LIQUIDS[typeSelect.value];
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                particles.push(new Particle());
+            }
 
-        ctx.save();
-        ctx.translate(width / 2, height / 2);
-        ctx.rotate(-container.angle);
+            // Spatial hashing
+            const cellSize = SPACING;
+            const cols = Math.ceil(container.w / cellSize) + 2;
+            const rows = Math.ceil(container.h / cellSize) + 2;
+            const grid = new Array(cols * rows);
+            for (let i = 0; i < grid.length; i++) grid[i] = [];
 
-        // Draw container
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(-container.w / 2, -container.h / 2, container.w, container.h);
+            function getGridIndex(x, y) {
+                let cx = Math.floor((x + container.w / 2) / cellSize) + 1;
+                let cy = Math.floor((y + container.h / 2) / cellSize) + 1;
+                cx = Math.max(0, Math.min(cols - 1, cx));
+                cy = Math.max(0, Math.min(rows - 1, cy));
+                return cx + cy * cols;
+            }
 
-        // Glass effect
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.fillRect(-container.w / 2, -container.h / 2, container.w, container.h);
+            function resize() {
+                width = window.innerWidth;
+                height = window.innerHeight;
+                canvas.width = width;
+                canvas.height = height;
+            }
 
-        // Draw particles
-        ctx.fillStyle = liquid.color;
+            window.addEventListener("resize", resize);
+            resize();
 
-        // Use metaball-like rendering for liquid look
-        // We'll just draw blurred circles or simple circles for performance
-        // For a true "liquid" look, we draw them slightly larger and semi-transparent
-        for (const p of particles) {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.radius * 1.5, 0, Math.PI * 2);
-            ctx.fill();
-        }
+            let isDragging = false;
+            let lastMouseX = 0;
 
-        ctx.restore();
+            canvas.addEventListener("mousedown", (e) => {
+                isDragging = true;
+                lastMouseX = e.clientX;
+            });
 
-        update();
-        requestAnimationFrame(draw);
-    }
+            window.addEventListener("mousemove", (e) => {
+                if (isDragging) {
+                    const dx = e.clientX - lastMouseX;
+                    container.targetAngle += dx * 0.01;
+                    lastMouseX = e.clientX;
+                }
+            });
 
-    draw();
-</script>
-</body>
+            window.addEventListener("mouseup", () => (isDragging = false));
+
+            function update() {
+                const liquid = LIQUIDS[typeSelect.value];
+                gravity = parseFloat(gravitySlider.value);
+                gravityVal.textContent = gravity.toFixed(1);
+
+                container.angle +=
+                    (container.targetAngle - container.angle) * 0.1;
+
+                const gx = Math.sin(container.angle) * gravity;
+                const gy = Math.cos(container.angle) * gravity;
+
+                const dt = 0.15;
+                const subSteps = Math.max(3, Math.ceil(gravity / 3) + 2);
+                const sdt = dt / subSteps;
+                const friction = 1.0 - (liquid.viscosity * 0.06) / subSteps;
+
+                const hw = container.w / 2 - PARTICLE_RADIUS;
+                const hh = container.h / 2 - PARTICLE_RADIUS;
+
+                for (let step = 0; step < subSteps; step++) {
+                    for (let i = 0; i < grid.length; i++) grid[i].length = 0;
+
+                    for (let i = 0; i < particles.length; i++) {
+                        const p = particles[i];
+                        p.vx += gx * sdt;
+                        p.vy += gy * sdt;
+
+                        p.px = p.x + p.vx * sdt;
+                        p.py = p.y + p.vy * sdt;
+
+                        const gIdx = getGridIndex(p.px, p.py);
+                        grid[gIdx].push(p);
+                    }
+
+                    for (let i = 0; i < particles.length; i++) {
+                        const p = particles[i];
+
+                        const cx =
+                            Math.floor((p.px + container.w / 2) / cellSize) + 1;
+                        const cy =
+                            Math.floor((p.py + container.h / 2) / cellSize) + 1;
+
+                        for (let y = cy - 1; y <= cy + 1; y++) {
+                            if (y < 0 || y >= rows) continue;
+                            for (let x = cx - 1; x <= cx + 1; x++) {
+                                if (x < 0 || x >= cols) continue;
+                                const gIdx = x + y * cols;
+                                const cell = grid[gIdx];
+                                for (let j = 0; j < cell.length; j++) {
+                                    const p2 = cell[j];
+                                    if (p === p2) continue;
+
+                                    const dx = p.px - p2.px;
+                                    const dy = p.py - p2.py;
+                                    const distSq = dx * dx + dy * dy;
+
+                                    if (distSq > 0.0001) {
+                                        const dist = Math.sqrt(distSq);
+                                        if (dist < SPACING) {
+                                            const overlap = SPACING - dist;
+                                            const nx = dx / dist;
+                                            const ny = dy / dist;
+                                            const correction = overlap * 0.5;
+
+                                            p.px += nx * correction;
+                                            p.py += ny * correction;
+                                            p2.px -= nx * correction;
+                                            p2.py -= ny * correction;
+                                        } else if (dist < SPACING * 1.5) {
+                                            const pull =
+                                                (dist - SPACING) *
+                                                liquid.stickiness;
+                                            const nx = dx / dist;
+                                            const ny = dy / dist;
+
+                                            p.px -= nx * pull;
+                                            p.py -= ny * pull;
+                                            p2.px += nx * pull;
+                                            p2.py += ny * pull;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (p.px > hw) p.px = hw;
+                        if (p.px < -hw) p.px = -hw;
+                        if (p.py > hh) p.py = hh;
+                        if (p.py < -hh) p.py = -hh;
+                    }
+
+                    for (let i = 0; i < particles.length; i++) {
+                        const p = particles[i];
+                        p.vx = ((p.px - p.x) / sdt) * friction;
+                        p.vy = ((p.py - p.y) / sdt) * friction;
+
+                        if (p.px >= hw || p.px <= -hw) {
+                            p.vx *= -0.2;
+                            p.vy *= liquid.wallSlide;
+                        }
+                        if (p.py >= hh || p.py <= -hh) {
+                            p.vy *= -0.2;
+                            p.vx *= liquid.wallSlide;
+                        }
+
+                        p.x = p.px;
+                        p.y = p.py;
+                    }
+                }
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, width, height);
+                const liquid = LIQUIDS[typeSelect.value];
+
+                ctx.save();
+                ctx.translate(width / 2, height / 2);
+                ctx.rotate(container.angle);
+
+                // Draw container
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 4;
+                ctx.strokeRect(
+                    -container.w / 2,
+                    -container.h / 2,
+                    container.w,
+                    container.h,
+                );
+
+                // Glass effect
+                ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+                ctx.fillRect(
+                    -container.w / 2,
+                    -container.h / 2,
+                    container.w,
+                    container.h,
+                );
+
+                // Draw particles
+                ctx.fillStyle = liquid.color;
+
+                // Use metaball-like rendering for liquid look
+                // We'll just draw blurred circles or simple circles for performance
+                // For a true "liquid" look, we draw them slightly larger and semi-transparent
+                for (const p of particles) {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, PARTICLE_RADIUS * 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+
+                update();
+                requestAnimationFrame(draw);
+            }
+
+            draw();
+        </script>
+    </body>
 </html>
