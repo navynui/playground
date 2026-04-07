@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slingshot 3D</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a1a2e;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: 'Segoe UI', sans-serif;
+}
+canvas {
+  display: block;
+  cursor: grab;
+}
+canvas:active {
+  cursor: grabbing;
+}
+#ui {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  color: #fff; font-size: 18px;
+  text-align: center; pointer-events: none; text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  z-index: 10;
+}
+#home-link {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  color: #eee;
+  text-decoration: none;
+  font-size: 14px;
+  background: rgba(0,0,0,0.5);
+  padding: 8px 14px;
+  border-radius: 8px;
+  transition: background 0.2s;
+  z-index: 10;
+}
+#home-link:hover {
+  background: rgba(0,0,0,0.7);
+}
+#resetBtn {
+  position: fixed; bottom: 20px; right: 20px;
+  padding: 12px 24px; background: #e94560; color: #fff;
+  border: none; border-radius: 8px; font-size: 16px; cursor: pointer;
+  font-family: 'Segoe UI', sans-serif; z-index: 10;
+}
+#resetBtn:hover { background: #ff6b81; }
+#modeBtn {
+  position: fixed; bottom: 20px; left: 20px;
+  padding: 12px 24px; background: #0f3460; color: #fff;
+  border: none; border-radius: 8px; font-size: 16px; cursor: pointer;
+  font-family: 'Segoe UI', sans-serif; z-index: 10;
+}
+#modeBtn:hover { background: #16213e; }
+#modeBtn.testing { background: #e94560; }
+#testFireBtn {
+  position: fixed; bottom: 70px; left: 20px;
+  padding: 12px 24px; background: #50e3c2; color: #1a1a2e;
+  border: none; border-radius: 8px; font-size: 16px; cursor: pointer;
+  font-family: 'Segoe UI', sans-serif; z-index: 10;
+}
+#testFireBtn:hover { background: #5ff5d4; }
+#testFireBtn.firing { background: #e94560; color: #fff; }
+#anglesBtn {
+  position: fixed; bottom: 120px; left: 20px;
+  padding: 12px 24px; background: #9b59b6; color: #fff;
+  border: none; border-radius: 8px; font-size: 16px; cursor: pointer;
+  font-family: 'Segoe UI', sans-serif; z-index: 10;
+}
+#anglesBtn:hover { background: #8e44ad; }
+#anglesBtn.on { background: #27ae60; }
+</style>
+</head>
+<body>
+<div id="ui">Pull the ball back and release to launch!</div>
+<a id="home-link" href="index.html">Home</a>
+<button id="resetBtn">New Building</button>
+<button id="modeBtn">Testing Mode</button>
+<button id="testFireBtn">Test Fire</button>
+<button id="anglesBtn">Show Angles</button>
+<canvas id="game"></canvas>
+<script>
+(function register() {
+  const registry = JSON.parse(localStorage.getItem('htmlRegistry') || '{}');
+  registry['shoot.html'] = document.title;
+  localStorage.setItem('htmlRegistry', JSON.stringify(registry));
+})();
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = () => canvas.width;
+const H = () => canvas.height;
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// 3D camera
+const camera = { x: 0, y: 3, z: -8, pitch: 0.15, fov: 600 };
+
+function project(x, y, z) {
+  const dx = x - camera.x;
+  const dy = y - camera.y;
+  const dz = z - camera.z;
+  const cosP = Math.cos(-camera.pitch);
+  const sinP = Math.sin(-camera.pitch);
+  const ry = dy * cosP - dz * sinP;
+  const rz = dy * sinP + dz * cosP;
+  if (rz <= 0.1) return null;
+  const scale = camera.fov / rz;
+  return { x: W()/2 + dx * scale, y: H()/2 - ry * scale, scale, z: rz };
+}
+
+// Slingshot
+const sling = { x: 0, y: 1.5, z: 0, ballRadius: 0.35 };
+let ball = { x: 0, y: 1.5, z: 0, vx: 0, vy: 0, vz: 0, active: false, landed: false };
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
+let dragCurrent = { x: 0, y: 0 };
+let dragLast = { x: 0, y: 0 };
+let dragVelocity = { x: 0, y: 0 };
+const maxPull = 4;
+const launchPower = 40;
+
+// Ground
+const groundY = 0;
+
+let showAngles = false;
+
+// Testing mode
+let testingMode = false;
+const wallZ = 8;
+const wallY = 0;
+const wallH = 12;
+const wallW = 20;
+let ballMarks = [];
+
+// Test fire
+let testFiring = false;
+let testFireTimer = 0;
+let testFireState = 'idle'; // idle, pulling, ready, flying, waiting
+let testFirePullStart = { x: 0, y: 0 };
+let testFirePullEnd = { x: 0, y: 0 };
+let testFirePullProgress = 0;
+const testFirePullDuration = 0.4;
+const testFireWaitDuration = 0.3;
+
+// Bricks physics
+let bricks = [];
+let glueBonds = [];
+let bondMap = new Map();
+let adjacency = [];
+const gravity = -9.8;
+const brickColors = ['#e94560', '#0f3460', '#16213e', '#f5a623', '#50e3c2', '#b8e986', '#ff6b81', '#70a1ff', '#ff7f50', '#a29bfe'];
+const wakeThreshold = 5;
+
+function addBuilding(centerX, centerZ, floors, bricksPerFloor, depthLayers) {
+  const brickW = 0.8;
+  const brickH = 0.5;
+  const brickD = 0.6;
+  const startIdx = bricks.length;
+  const gap = 0.01;
+
+  for (let d = 0; d < depthLayers; d++) {
+    for (let f = 0; f < floors; f++) {
+      for (let b = 0; b < bricksPerFloor; b++) {
+        if ((f + b + d) % 2 !== 0) continue;
+        const bx = centerX + (b - (bricksPerFloor-1)/2) * (brickW + gap);
+        const by = groundY + brickH/2 + f * (brickH + gap);
+        const bz = centerZ + d * (brickD + gap);
+        bricks.push({
+          x: bx, y: by, z: bz,
+          ox: bx, oy: by, oz: bz,
+          vx: 0, vy: 0, vz: 0,
+          rx: 0, ry: 0, rz: 0,
+          rvx: 0, rvy: 0, rvz: 0,
+          w: brickW, h: brickH, d: brickD,
+          color: brickColors[Math.floor(Math.random() * brickColors.length)],
+          active: true,
+          awake: false,
+          mass: 1,
+          onGround: false
+        });
+      }
+    }
+  }
+
+  // Create glue bonds for this building only
+  for (let i = startIdx; i < bricks.length; i++) {
+    if (!adjacency[i]) adjacency[i] = [];
+    for (let j = i + 1; j < bricks.length; j++) {
+      const a = bricks[i], b = bricks[j];
+      const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+      const dist = Math.hypot(dx, dy, dz);
+      const threshold = Math.hypot(Math.max(a.w, b.w), Math.max(a.h, b.h), Math.max(a.d, b.d)) * 1.1;
+      if (dist < threshold) {
+        glueBonds.push({ a: i, b: j, broken: false, restDist: dist });
+        const key = i < j ? `${i}_${j}` : `${j}_${i}`;
+        bondMap.set(key, glueBonds.length - 1);
+        if (!adjacency[j]) adjacency[j] = [];
+        adjacency[i].push(j);
+        adjacency[j].push(i);
+      }
+    }
+  }
+}
+
+function generateBuilding() {
+  bricks = [];
+  glueBonds = [];
+  bondMap = new Map();
+  adjacency = [];
+  const buildingZ = 22 + Math.random() * 4;
+
+  const getFloors = (base, rand) => 3 * (base + Math.floor(Math.random() * rand));
+
+  // Center building
+  const centerFloors = getFloors(6, 6);
+  const centerWidth = 5 + Math.floor(Math.random() * 4);
+  const centerDepth = 3 + Math.floor(Math.random() * 3);
+  addBuilding(0, buildingZ, centerFloors, centerWidth, centerDepth);
+
+  const addSideBuilding = (offsetX, offsetZ = 1) => {
+    const floors = getFloors(4, 5);
+    const width = 4 + Math.floor(Math.random() * 3);
+    const depth = 2 + Math.floor(Math.random() * 2);
+    addBuilding(offsetX, buildingZ + offsetZ, floors, width, depth);
+  };
+
+  // Immediate side buildings
+  addSideBuilding(-4.5, 1);
+  addSideBuilding(4.5, 1);
+
+  // Two more buildings on the left side
+  addSideBuilding(-9.0, 2);
+  addSideBuilding(-13.5, 3);
+
+  // Two more buildings on the right side
+  addSideBuilding(9.0, 2);
+  addSideBuilding(13.5, 3);
+}
+generateBuilding();
+
+function resetBall() {
+  ball.x = sling.x;
+  ball.y = sling.y;
+  ball.z = sling.z;
+  ball.vx = 0; ball.vy = 0; ball.vz = 0;
+  ball.active = false;
+  ball.landed = false;
+}
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  generateBuilding();
+  resetBall();
+});
+
+const modeBtn = document.getElementById('modeBtn');
+modeBtn.addEventListener('click', () => {
+  testingMode = !testingMode;
+  modeBtn.textContent = testingMode ? 'Normal Mode' : 'Testing Mode';
+  modeBtn.classList.toggle('testing', testingMode);
+  if (!testingMode) {
+    ballMarks = [];
+    if (testFiring) {
+      testFiring = false;
+      testFireState = 'idle';
+      document.getElementById('testFireBtn').classList.remove('firing');
+      document.getElementById('testFireBtn').textContent = 'Test Fire';
+    }
+  }
+});
+
+const anglesBtn = document.getElementById('anglesBtn');
+anglesBtn.addEventListener('click', () => {
+  showAngles = !showAngles;
+  anglesBtn.classList.toggle('on', showAngles);
+});
+
+const testFireBtn = document.getElementById('testFireBtn');
+testFireBtn.addEventListener('click', () => {
+  testFiring = !testFiring;
+  testFireBtn.classList.toggle('firing', testFiring);
+  testFireBtn.textContent = testFiring ? 'Stop Firing' : 'Test Fire';
+  if (testFiring) {
+    testFireState = 'idle';
+    testFireTimer = 0;
+    resetBall();
+  } else {
+    testFireState = 'idle';
+    resetBall();
+  }
+});
+
+function startTestFire() {
+  const pullDist = 0.5 + Math.random() * (maxPull - 0.5);
+  const angle = Math.random() * Math.PI * 2;
+  testFirePullEnd = { x: Math.cos(angle) * pullDist, y: Math.sin(angle) * pullDist };
+  testFirePullStart = { x: 0, y: 0 };
+  testFirePullProgress = 0;
+  testFireState = 'pulling';
+}
+
+function releaseTestFire() {
+  const pullDist = Math.hypot(testFirePullEnd.x, testFirePullEnd.y);
+  const angle = Math.atan2(testFirePullEnd.y, testFirePullEnd.x);
+  const pullX = Math.cos(angle) * pullDist;
+  const pullY = Math.sin(angle) * pullDist;
+  const power = (pullDist / maxPull) * launchPower;
+  ball.vz = power * 2.5;
+  ball.vx = -pullX * power * 0.6;
+  ball.vy = pullY * power * 0.8 + 2;
+  ball.active = true;
+  testFireState = 'flying';
+}
+
+function updateTestFire(dt) {
+  if (!testFiring) return;
+
+  if (testFireState === 'idle') {
+    startTestFire();
+  } else if (testFireState === 'pulling') {
+    testFirePullProgress += dt / testFirePullDuration;
+    if (testFirePullProgress >= 1) {
+      testFirePullProgress = 1;
+      ball.x = sling.x + testFirePullEnd.x;
+      ball.y = Math.max(sling.y - testFirePullEnd.y, sling.ballRadius);
+      ball.z = sling.z - Math.hypot(testFirePullEnd.x, testFirePullEnd.y) * 0.8;
+      testFireState = 'ready';
+      testFireTimer = 0;
+    } else {
+      const t = testFirePullProgress;
+      ball.x = sling.x + testFirePullEnd.x * t;
+      ball.y = Math.max(sling.y - testFirePullEnd.y * t, sling.ballRadius);
+      ball.z = sling.z - Math.hypot(testFirePullEnd.x, testFirePullEnd.y) * 0.8 * t;
+    }
+  } else if (testFireState === 'ready') {
+    testFireTimer += dt;
+    if (testFireTimer >= testFireWaitDuration) {
+      releaseTestFire();
+    }
+  } else if (testFireState === 'flying') {
+    if (!ball.active && ball.landed) {
+      testFireTimer += dt;
+      if (testFireTimer >= 0.5) {
+        resetBall();
+        testFireState = 'idle';
+        testFireTimer = 0;
+      }
+    }
+  }
+}
+
+// Input handling
+function getPos(e) {
+  if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  return { x: e.clientX, y: e.clientY };
+}
+
+function screenTo3DDrag(dx, dy) {
+  const sensitivity = 0.015;
+  return { x: dx * sensitivity, y: dy * sensitivity * 0.6 };
+}
+
+function onDown(e) {
+  e.preventDefault();
+  if (ball.active || ball.landed) return;
+  const pos = getPos(e);
+  const ballScreen = project(ball.x, ball.y, ball.z);
+  if (!ballScreen) return;
+  const dist = Math.hypot(pos.x - ballScreen.x, pos.y - ballScreen.y);
+  if (dist < 100) {
+    isDragging = true;
+    dragStart = pos;
+    dragCurrent = pos;
+    dragLast = pos;
+  }
+}
+
+function onMove(e) {
+  e.preventDefault();
+  if (!isDragging) return;
+  dragLast = { ...dragCurrent };
+  dragCurrent = getPos(e);
+  const dx = dragCurrent.x - dragStart.x;
+  const dy = dragCurrent.y - dragStart.y;
+  const drag = screenTo3DDrag(dx, dy);
+  const pullDist = Math.min(Math.hypot(drag.x, drag.y), maxPull);
+  const angle = Math.atan2(drag.y, drag.x);
+  const pullX = Math.cos(angle) * pullDist;
+  const pullY = Math.sin(angle) * pullDist;
+  ball.x = sling.x + pullX;
+  ball.y = Math.max(sling.y - pullY, sling.ballRadius);
+  ball.z = sling.z - pullDist * 0.8;
+}
+
+function onUp(e) {
+  e.preventDefault();
+  if (!isDragging) return;
+  isDragging = false;
+  const dx = dragCurrent.x - dragStart.x;
+  const dy = dragCurrent.y - dragStart.y;
+  const drag = screenTo3DDrag(dx, dy);
+  const pullDist = Math.min(Math.hypot(drag.x, drag.y), maxPull);
+  const angle = Math.atan2(drag.y, drag.x);
+  const pullX = Math.cos(angle) * pullDist;
+  const pullY = Math.sin(angle) * pullDist;
+  const power = (pullDist / maxPull) * launchPower;
+  ball.vz = power * 2.5;
+  ball.vx = -pullX * power * 0.6;
+  ball.vy = pullY * power * 0.8 + 2;
+  ball.active = true;
+}
+
+canvas.addEventListener('mousedown', onDown);
+canvas.addEventListener('mousemove', onMove);
+canvas.addEventListener('mouseup', onUp);
+canvas.addEventListener('touchstart', onDown, { passive: false });
+canvas.addEventListener('touchmove', onMove, { passive: false });
+canvas.addEventListener('touchend', onUp, { passive: false });
+
+// Physics update
+function updatePhysics(dt) {
+  if (ball.active) {
+    ball.vy += gravity * dt;
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+    ball.z += ball.vz * dt;
+
+    if (ball.y <= sling.ballRadius) {
+      ball.y = sling.ballRadius;
+      ball.vy *= -0.3;
+      ball.vx *= 0.8;
+      ball.vz *= 0.8;
+      if (Math.abs(ball.vy) < 0.5) {
+        ball.vy = 0;
+        ball.active = false;
+        ball.landed = true;
+        setTimeout(resetBall, 500);
+      }
+    }
+
+    // Wall collision in testing mode
+    if (testingMode && ball.active) {
+      const ballR = sling.ballRadius;
+      const prevZ = ball.z - ball.vz * dt;
+      if ((prevZ < wallZ && ball.z >= wallZ - ballR) || (prevZ > wallZ && ball.z <= wallZ + ballR)) {
+        if (ball.x > -wallW/2 - ballR && ball.x < wallW/2 + ballR && ball.y > wallY && ball.y < wallY + wallH) {
+          ballMarks.push({ x: ball.x, y: ball.y, z: wallZ, time: Date.now() });
+          ball.z = wallZ - ballR;
+          ball.vz *= -0.3;
+          ball.vx *= 0.5;
+          ball.vy *= 0.5;
+        }
+      }
+    }
+
+    // Reset if ball stops moving or goes too far
+    const speed = Math.hypot(ball.vx, ball.vy, ball.vz);
+    if (ball.active && speed < 0.3 && ball.z > 5) {
+      ball.active = false;
+      ball.landed = true;
+      setTimeout(resetBall, 500);
+    }
+    if (ball.z > 60 || ball.x < -20 || ball.x > 20) {
+      ball.active = false;
+      ball.landed = true;
+      setTimeout(resetBall, 500);
+    }
+  }
+
+  // Ball-brick collision - wake up bricks
+  if (ball.active) {
+    for (let i = 0; i < bricks.length; i++) {
+      const brick = bricks[i];
+      if (!brick.active || brick.fixed) continue;
+      const dx = ball.x - brick.x;
+      const dy = ball.y - brick.y;
+      const dz = ball.z - brick.z;
+      const dist = Math.hypot(dx, dy, dz);
+      if (dist < sling.ballRadius + Math.max(brick.w, brick.h, brick.d) * 0.5) {
+        const speed = Math.hypot(ball.vx, ball.vy, ball.vz);
+        const force = speed * 2;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const nz = dz / dist;
+        brick.awake = true;
+        brick.vx += nx * force;
+        brick.vy += ny * force * 0.7 + Math.abs(ny) * force * 0.5;
+        brick.vz += nz * force;
+        brick.rvx += (Math.random() - 0.5) * force * 2;
+        brick.rvz += (Math.random() - 0.5) * force * 2;
+        ball.vz *= 0.6;
+        ball.vx *= 0.6;
+        ball.vy *= 0.6;
+
+        // Wake up nearby bricks via bonds
+        wakeBrick(i);
+      }
+    }
+  }
+
+  // Build spatial grid for faster collision in 3D (cell size ~ 1.5 units)
+  const cellSize = 1.5;
+  const grid = new Map();
+  for (let j = 0; j < bricks.length; j++) {
+    const b = bricks[j];
+    if (!b.active) continue;
+    const cx = Math.floor(b.x / cellSize);
+    const cy = Math.floor(b.y / cellSize);
+    const cz = Math.floor(b.z / cellSize);
+    const hash = `${cx},${cy},${cz}`;
+    if (!grid.has(hash)) grid.set(hash, []);
+    grid.get(hash).push(j);
+  }
+
+  // Brick physics - only update awake bricks
+  for (let i = 0; i < bricks.length; i++) {
+    const brick = bricks[i];
+    if (!brick.active || !brick.awake) continue;
+    brick.vy += gravity * dt;
+    brick.x += brick.vx * dt;
+    brick.y += brick.vy * dt;
+    brick.z += brick.vz * dt;
+    brick.rx += brick.rvx * dt;
+    brick.ry += brick.rvy * dt;
+    brick.rz += brick.rvz * dt;
+    brick.vx *= 0.98;
+    brick.vz *= 0.98;
+    brick.rvx *= 0.96;
+    brick.rvy *= 0.96;
+    brick.rvz *= 0.96;
+
+    if (brick.y <= brick.h/2) {
+      brick.y = brick.h/2;
+      brick.awake = false;
+      brick.fixed = true;
+      brick.vx = 0; brick.vy = 0; brick.vz = 0;
+      brick.rvx = 0; brick.rvy = 0; brick.rvz = 0;
+      brick.rx = 0; brick.rz = 0;
+      continue;
+    }
+
+    const speedSq = brick.vx**2 + brick.vy**2 + brick.vz**2 + brick.rvx**2 + brick.rvy**2 + brick.rvz**2;
+    if (speedSq < 0.1) {
+      brick.sleepTimer = (brick.sleepTimer || 0) + dt;
+      if (brick.sleepTimer > 0.5) {
+        brick.awake = false;
+        brick.vx = 0; brick.vy = 0; brick.vz = 0;
+        brick.rvx = 0; brick.rvy = 0; brick.rvz = 0;
+        continue;
+      }
+    } else {
+      brick.sleepTimer = 0;
+    }
+
+    // Brick-brick collision - skip bonded bricks
+    const cx = Math.floor(brick.x / cellSize);
+    const cy = Math.floor(brick.y / cellSize);
+    const cz = Math.floor(brick.z / cellSize);
+
+    for (let gX = -1; gX <= 1; gX++) {
+      for (let gY = -1; gY <= 1; gY++) {
+        for (let gZ = -1; gZ <= 1; gZ++) {
+          const hash = `${cx + gX},${cy + gY},${cz + gZ}`;
+          const cell = grid.get(hash);
+          if (!cell) continue;
+          for (const j of cell) {
+            if (j === i) continue;
+            const other = bricks[j];
+            if (!other.active) continue;
+            if (other.awake && j < i) continue;
+
+            const dx = brick.x - other.x;
+            const dy = brick.y - other.y;
+            const dz = brick.z - other.z;
+            const dist = Math.hypot(dx, dy, dz);
+            const minDist = (brick.w + other.w) * 0.4;
+            if (dist < minDist && dist > 0.01) {
+              const key = i < j ? `${i}_${j}` : `${j}_${i}`;
+              if (bondMap.has(key) && !glueBonds[bondMap.get(key)].broken) continue;
+              const overlap = minDist - dist;
+              const nx = dx / dist;
+              const ny = dy / dist;
+              const nz = dz / dist;
+              brick.x += nx * overlap * 0.5;
+              brick.y += ny * overlap * 0.5;
+              brick.z += nz * overlap * 0.5;
+              const relVx = brick.vx - other.vx;
+              const relVy = brick.vy - other.vy;
+              const relVz = brick.vz - other.vz;
+              const relV = relVx * nx + relVy * ny + relVz * nz;
+              if (relV < 0) {
+                brick.vx -= nx * relV * 0.5;
+                brick.vy -= ny * relV * 0.5;
+                brick.vz -= nz * relV * 0.5;
+                if (other.awake) {
+                  other.vx += nx * relV * 0.5;
+                  other.vy += ny * relV * 0.5;
+                  other.vz += nz * relV * 0.5;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Glue bonds - only apply to awake bricks
+  for (const bond of glueBonds) {
+    if (bond.broken) continue;
+    const a = bricks[bond.a];
+    const b = bricks[bond.b];
+    if (!a || !b || !a.active || !b.active) continue;
+    if (!a.awake && !b.awake) continue;
+
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    const dz = a.z - b.z;
+    const dist = Math.hypot(dx, dy, dz);
+    if (dist < 0.01) continue;
+
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const nz = dz / dist;
+
+    const springForce = (dist - bond.restDist) * 10;
+
+    const relVx = a.vx - b.vx;
+    const relVy = a.vy - b.vy;
+    const relVz = a.vz - b.vz;
+    const relVn = relVx * nx + relVy * ny + relVz * nz;
+    const damping = relVn * 5;
+
+    const totalForce = springForce + damping;
+    if (a.awake) {
+      a.vx -= nx * totalForce * dt;
+      a.vy -= ny * totalForce * dt;
+      a.vz -= nz * totalForce * dt;
+    }
+    if (b.awake) {
+      b.vx += nx * totalForce * dt;
+      b.vy += ny * totalForce * dt;
+      b.vz += nz * totalForce * dt;
+    }
+
+    const relForce = Math.hypot(relVx, relVy, relVz);
+    if (relForce > 20) {
+      bond.broken = true;
+    }
+  }
+}
+
+function wakeBrick(idx) {
+  const toWake = [idx];
+  const visited = new Set();
+  while (toWake.length > 0) {
+    const i = toWake.pop();
+    if (visited.has(i)) continue;
+    visited.add(i);
+    const brick = bricks[i];
+    if (!brick || !brick.active || brick.fixed) continue;
+    brick.awake = true;
+    const neighbors = adjacency[i] || [];
+    for (const n of neighbors) {
+      if (!visited.has(n)) {
+        const bondKey = i < n ? `${i}_${n}` : `${n}_${i}`;
+        const bondIdx = bondMap.get(bondKey);
+        if (bondIdx !== undefined && !glueBonds[bondIdx].broken) {
+          toWake.push(n);
+        }
+      }
+    }
+  }
+}
+
+// Rendering
+function drawSky() {
+  const grad = ctx.createLinearGradient(0, 0, 0, H());
+  grad.addColorStop(0, '#0f0c29');
+  grad.addColorStop(0.5, '#302b63');
+  grad.addColorStop(1, '#24243e');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W(), H());
+
+  // Stars
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < 50; i++) {
+    const sx = (Math.sin(i * 127.1 + 311.7) * 0.5 + 0.5) * W();
+    const sy = (Math.sin(i * 269.5 + 183.3) * 0.5 + 0.5) * H() * 0.5;
+    const size = 0.5 + Math.sin(Date.now() * 0.001 + i) * 0.5;
+    ctx.globalAlpha = 0.3 + size * 0.5;
+    ctx.fillRect(sx, sy, size * 2, size * 2);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawWall() {
+  if (!testingMode) return;
+
+  const hw = wallW / 2;
+  const corners = [
+    project(-hw, wallY, wallZ),
+    project(hw, wallY, wallZ),
+    project(hw, wallY + wallH, wallZ),
+    project(-hw, wallY + wallH, wallZ),
+  ];
+  if (corners.some(c => c === null)) return;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.strokeStyle = 'rgba(200,200,200,0.5)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(corners[0].x, corners[0].y);
+  for (let i = 1; i < corners.length; i++) ctx.lineTo(corners[i].x, corners[i].y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawBallMarks() {
+  if (!testingMode || ballMarks.length === 0) return;
+
+  for (const mark of ballMarks) {
+    const p = project(mark.x, mark.y, mark.z + 0.05);
+    if (!p) continue;
+    const r = sling.ballRadius * p.scale * 0.6;
+
+    ctx.fillStyle = 'rgba(100,100,100,0.7)';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.max(3, r), 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(60,60,60,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.max(4, r + 2), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+function drawGround() {
+  const gridSize = 2;
+  const gridCount = 30;
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 1;
+
+  for (let i = -gridCount; i <= gridCount; i++) {
+    const p1 = project(i * gridSize, groundY, -gridCount * gridSize);
+    const p2 = project(i * gridSize, groundY, gridCount * gridSize);
+    if (p1 && p2) {
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+    }
+    const p3 = project(-gridCount * gridSize, groundY, i * gridSize);
+    const p4 = project(gridCount * gridSize, groundY, i * gridSize);
+    if (p3 && p4) {
+      ctx.beginPath();
+      ctx.moveTo(p3.x, p3.y);
+      ctx.lineTo(p4.x, p4.y);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawSlingshot() {
+  const base = project(sling.x, groundY, sling.z);
+  const leftFork = project(sling.x - 0.5, sling.y + 1.2, sling.z - 0.2);
+  const rightFork = project(sling.x + 0.5, sling.y + 1.2, sling.z - 0.2);
+  const top = project(sling.x, sling.y + 1.5, sling.z);
+  const bottom = project(sling.x, sling.y - 0.5, sling.z);
+
+  if (!base || !leftFork || !rightFork || !top || !bottom) return;
+
+  // Posts
+  ctx.strokeStyle = '#8B4513';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(bottom.x, bottom.y);
+  ctx.lineTo(leftFork.x, leftFork.y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(bottom.x, bottom.y);
+  ctx.lineTo(rightFork.x, rightFork.y);
+  ctx.stroke();
+
+  // Y shape
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(leftFork.x, leftFork.y);
+  ctx.lineTo(top.x, top.y);
+  ctx.lineTo(rightFork.x, rightFork.y);
+  ctx.stroke();
+}
+
+function drawBall() {
+  const p = project(ball.x, ball.y, ball.z);
+  if (!p) return;
+  const r = sling.ballRadius * p.scale;
+
+  // Shadow
+  const shadow = project(ball.x, groundY + 0.01, ball.z);
+  if (shadow) {
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(shadow.x, shadow.y, r * 0.8, r * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Ball
+  const grad = ctx.createRadialGradient(p.x - r*0.3, p.y - r*0.3, r*0.1, p.x, p.y, r);
+  grad.addColorStop(0, '#c0c0c0');
+  grad.addColorStop(0.5, '#808080');
+  grad.addColorStop(1, '#404040');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.beginPath();
+  ctx.arc(p.x - r*0.25, p.y - r*0.25, r*0.3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawRubberBand() {
+  if (!isDragging) return;
+  const leftFork = project(sling.x - 0.5, sling.y + 1.2, sling.z - 0.2);
+  const rightFork = project(sling.x + 0.5, sling.y + 1.2, sling.z - 0.2);
+  const ballP = project(ball.x, ball.y, ball.z);
+  if (!leftFork || !rightFork || !ballP) return;
+
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(leftFork.x, leftFork.y);
+  ctx.lineTo(ballP.x, ballP.y);
+  ctx.lineTo(rightFork.x, rightFork.y);
+  ctx.stroke();
+}
+
+function drawBrick(brick) {
+  if (!brick.active) return;
+  const hw = brick.w / 2;
+  const hh = brick.h / 2;
+  const hd = brick.d / 2;
+
+  const corners = [
+    project(brick.x - hw, brick.y - hh, brick.z - hd),
+    project(brick.x + hw, brick.y - hh, brick.z - hd),
+    project(brick.x + hw, brick.y + hh, brick.z - hd),
+    project(brick.x - hw, brick.y + hh, brick.z - hd),
+    project(brick.x - hw, brick.y - hh, brick.z + hd),
+    project(brick.x + hw, brick.y - hh, brick.z + hd),
+    project(brick.x + hw, brick.y + hh, brick.z + hd),
+    project(brick.x - hw, brick.y + hh, brick.z + hd),
+  ];
+
+  if (corners.some(c => c === null)) return;
+
+  // Sort faces by depth for painter's algorithm
+  const faces = [
+    { indices: [0, 1, 2, 3], normal: [0, 0, -1] }, // front
+    { indices: [5, 4, 7, 6], normal: [0, 0, 1] },   // back
+    { indices: [4, 0, 3, 7], normal: [-1, 0, 0] },  // left
+    { indices: [1, 5, 6, 2], normal: [1, 0, 0] },   // right
+    { indices: [3, 2, 6, 7], normal: [0, 1, 0] },   // top
+    { indices: [4, 5, 1, 0], normal: [0, -1, 0] },  // bottom
+  ];
+
+  // Simple lighting
+  const lightDir = [0.5, 1, 0.3];
+  const lightLen = Math.hypot(...lightDir);
+  lightDir[0] /= lightLen; lightDir[1] /= lightLen; lightDir[2] /= lightLen;
+
+  for (const face of faces) {
+    const pts = face.indices.map(i => corners[i]);
+    const avgZ = pts.reduce((s, p) => s + p.z, 0) / 4;
+
+    // Face normal (simplified)
+    const v1x = pts[1].x - pts[0].x, v1y = pts[1].y - pts[0].y;
+    const v2x = pts[3].x - pts[0].x, v2y = pts[3].y - pts[0].y;
+    const cross = v1x * v2y - v1y * v2x;
+    if (cross > 0) continue; // Backface culling
+
+    // Lighting based on face orientation
+    const dot = Math.abs(face.normal[1]) * 0.7 + Math.abs(face.normal[0]) * 0.2 + Math.abs(face.normal[2]) * 0.1;
+    const brightness = 0.5 + dot * 0.5;
+
+    ctx.fillStyle = adjustBrightness(brick.color, brightness);
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+function adjustBrightness(hex, factor) {
+  const r = parseInt(hex.slice(1,3), 16);
+  const g = parseInt(hex.slice(3,5), 16);
+  const b = parseInt(hex.slice(5,7), 16);
+  return `rgb(${Math.min(255, r * factor)|0},${Math.min(255, g * factor)|0},${Math.min(255, b * factor)|0})`;
+}
+
+function drawTrajectory() {
+  if (!isDragging) return;
+  const dx = dragCurrent.x - dragStart.x;
+  const dy = dragCurrent.y - dragStart.y;
+  const drag = screenTo3DDrag(dx, dy);
+  const pullDist = Math.min(Math.hypot(drag.x, drag.y), maxPull);
+  const angle = Math.atan2(drag.y, drag.x);
+  const pullX = Math.cos(angle) * pullDist;
+  const pullY = Math.sin(angle) * pullDist;
+  const power = (pullDist / maxPull) * launchPower;
+  const vx = -pullX * power * 0.6;
+  const vy = pullY * power * 0.8 + 2;
+  const vz = power * 2.5;
+  const sx = ball.x;
+  const sy = ball.y;
+  const sz = ball.z;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  for (let t = 0.1; t < 3; t += 0.1) {
+    const px = sx + vx * t;
+    const py = sy + vy * t + 0.5 * gravity * t * t;
+    const pz = sz + vz * t;
+    if (py < groundY) break;
+    const p = project(px, py, pz);
+    if (p && p.y > 0 && p.y < H()) {
+      const r = 4 * (1 - t/3);
+      ctx.globalAlpha = Math.max(0, 1 - t/3);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(1, r), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawAngles() {
+  if (!showAngles) return;
+  
+  let pDist = 0, vx = 0, vy = 0, vz = 0;
+  
+  if (isDragging) {
+    const dx = dragCurrent.x - dragStart.x;
+    const dy = dragCurrent.y - dragStart.y;
+    const drag = screenTo3DDrag(dx, dy);
+    const pullDist = Math.min(Math.hypot(drag.x, drag.y), maxPull);
+    pDist = pullDist;
+    const angle = Math.atan2(drag.y, drag.x);
+    const pullX = Math.cos(angle) * pullDist;
+    const pullY = Math.sin(angle) * pullDist;
+    const power = (pullDist / maxPull) * launchPower;
+    vx = -pullX * power * 0.6;
+    vy = pullY * power * 0.8 + 2;
+    vz = power * 2.5;
+  } else if (testFiring && testFireState !== 'idle' && testFireState !== 'flying') {
+    const pullDist = testFirePullProgress * Math.hypot(testFirePullEnd.x, testFirePullEnd.y);
+    pDist = pullDist;
+    const angle = Math.atan2(testFirePullEnd.y, testFirePullEnd.x);
+    const pullX = Math.cos(angle) * pullDist;
+    const pullY = Math.sin(angle) * pullDist;
+    const power = (pullDist / maxPull) * launchPower;
+    vx = -pullX * power * 0.6;
+    vy = pullY * power * 0.8 + 2;
+    vz = power * 2.5;
+  }
+
+  if (pDist > 0.01) {
+    const hAngle = (Math.atan2(vx, vz) * 180 / Math.PI).toFixed(1);
+    const vAngle = (Math.atan2(vy, Math.hypot(vx, vz)) * 180 / Math.PI).toFixed(1);
+    
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(20, 60, 240, 110, 8);
+    else ctx.rect(20, 60, 240, 110);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    
+    ctx.fillStyle = '#50e3c2';
+    ctx.font = '16px "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Pull Dist: ${pDist.toFixed(2)} m / ${(maxPull).toFixed(1)} m`, 40, 95);
+    ctx.fillText(`H-Angle: ${hAngle > 0 ? '+' : ''}${hAngle}°`, 40, 120);
+    ctx.fillText(`V-Angle: ${vAngle > 0 ? '+' : ''}${vAngle}°`, 40, 145);
+  }
+}
+
+// Main loop
+let lastTime = performance.now();
+function gameLoop(time) {
+  const dt = Math.min((time - lastTime) / 1000, 0.05);
+  lastTime = time;
+
+  updateTestFire(dt);
+  updatePhysics(dt);
+
+  drawSky();
+  drawGround();
+  drawWall();
+  drawSlingshot();
+
+  if (!testingMode) {
+    const sortedBricks = [...bricks].sort((a, b) => b.z - a.z);
+    for (const brick of sortedBricks) {
+      drawBrick(brick);
+    }
+  }
+
+  drawTrajectory();
+  drawBall();
+  drawRubberBand();
+  drawBallMarks();
+  drawAngles();
+
+  requestAnimationFrame(gameLoop);
+}
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

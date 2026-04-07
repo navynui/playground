@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marble Machine 2D</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a1a2e;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: 'Segoe UI', sans-serif;
+}
+canvas {
+  display: block;
+  cursor: crosshair;
+}
+#ui {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  color: #fff; font-size: 18px;
+  text-align: center; pointer-events: none; text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  z-index: 10;
+}
+#home-link {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  color: #eee;
+  text-decoration: none;
+  font-size: 14px;
+  background: rgba(0,0,0,0.5);
+  padding: 8px 14px;
+  border-radius: 8px;
+  transition: background 0.2s;
+  z-index: 10;
+}
+#home-link:hover {
+  background: rgba(0,0,0,0.7);
+}
+#info {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  color: rgba(255,255,255,0.7); font-size: 14px;
+  text-align: center; pointer-events: none;
+  z-index: 10;
+}
+#editBtn {
+  position: fixed; top: 16px; left: 16px;
+  padding: 8px 14px; background: #0f3460; color: #fff;
+  border: none; border-radius: 8px; font-size: 14px; cursor: pointer;
+  font-family: 'Segoe UI', sans-serif; z-index: 10;
+}
+#editBtn:hover { background: #16213e; }
+#editBtn.active { background: #f5a623; color: #1a1a2e; }
+#clearBtn {
+  position: fixed; top: 16px; left: 130px;
+  padding: 8px 14px; background: #e94560; color: #fff;
+  border: none; border-radius: 8px; font-size: 14px; cursor: pointer;
+  font-family: 'Segoe UI', sans-serif; z-index: 10;
+}
+#clearBtn:hover { background: #ff6b81; }
+#resetBtn {
+  position: fixed; top: 16px; left: 280px;
+  padding: 8px 14px; background: #50e3c2; color: #1a1a2e;
+  border: none; border-radius: 8px; font-size: 14px; cursor: pointer;
+  font-family: 'Segoe UI', sans-serif; z-index: 10;
+}
+#resetBtn:hover { background: #5ff5d4; }
+</style>
+</head>
+<body>
+<div id="ui">Click anywhere to add marbles!</div>
+<a id="home-link" href="index.html">Home</a>
+<button id="editBtn">Edit Mode</button>
+<button id="clearBtn">Clear Marbles</button>
+<button id="resetBtn">Reset Layout</button>
+<div id="info">Marbles: <span id="count">0</span></div>
+<canvas id="game"></canvas>
+<script>
+(function register() {
+  const registry = JSON.parse(localStorage.getItem('htmlRegistry') || '{}');
+  registry['marble.html'] = document.title;
+  localStorage.setItem('htmlRegistry', JSON.stringify(registry));
+})();
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = () => canvas.width;
+const H = () => canvas.height;
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', () => {
+  resize();
+  buildContraption();
+});
+
+const gravity = 800;
+const friction = 0.998;
+const restitution = 0.6;
+const marbleRadius = 8;
+
+let marbles = [];
+const marbleColors = ['#e94560', '#0f3460', '#f5a623', '#50e3c2', '#b8e986', '#ff6b81', '#70a1ff', '#ff7f50', '#a29bfe', '#fd79a8', '#00b894', '#fdcb6e', '#6c5ce7', '#00cec9', '#e17055', '#74b9ff'];
+
+function randomColor() {
+  return marbleColors[Math.floor(Math.random() * marbleColors.length)];
+}
+
+// Edit mode
+let editMode = false;
+let selectedElement = null;
+let selectedType = null;
+let selectedAnchor = null;
+let isDragging = false;
+let dragOffset = { x: 0, y: 0 };
+const anchorSize = 12;
+const anchorHitRadius = 15;
+
+// Contraption elements
+let rails = [];
+let belts = [];
+let stairs = [];
+let funnels = [];
+let bumpers = [];
+let paddles = [];
+
+function buildContraption() {
+  rails = [];
+  belts = [];
+  stairs = [];
+  funnels = [];
+  bumpers = [];
+  paddles = [];
+
+  const w = W();
+  const h = H();
+  const pad = 40;
+
+  // Outer walls
+  rails.push({ x1: pad, y1: 0, x2: pad, y2: h, type: 'wall' });
+  rails.push({ x1: w - pad, y1: 0, x2: w - pad, y2: h, type: 'wall' });
+  rails.push({ x1: pad, y1: h - pad, x2: w - pad, y2: h - pad, type: 'floor' });
+
+  // Top platform
+  rails.push({ x1: pad, y1: 80, x2: w - pad, y2: 80, type: 'rail' });
+
+  // Zigzag ramps
+  const rampY = 160;
+  const rampSpacing = 100;
+  const rampCount = Math.floor((h - 200) / rampSpacing);
+
+  for (let i = 0; i < rampCount; i++) {
+    const y = rampY + i * rampSpacing;
+    const isLeft = i % 2 === 0;
+    if (isLeft) {
+      rails.push({ x1: pad, y1: y, x2: w * 0.65, y2: y + 60, type: 'ramp' });
+    } else {
+      rails.push({ x1: w - pad, y1: y, x2: w * 0.35, y2: y + 60, type: 'ramp' });
+    }
+  }
+
+  // Funnel at top
+  funnels.push({ x1: pad, y1: 80, x2: w * 0.3, y2: 140 });
+  funnels.push({ x1: w - pad, y1: 80, x2: w * 0.7, y2: 140 });
+
+  // Bumpers (circular obstacles)
+  const bumperRows = 3;
+  const bumperCols = 5;
+  const bumperStartY = 200;
+  const bumperSpacingY = 80;
+  const bumperSpacingX = (w - pad * 2) / (bumperCols + 1);
+
+  for (let r = 0; r < bumperRows; r++) {
+    for (let c = 0; c < bumperCols; c++) {
+      const offsetX = r % 2 === 0 ? 0 : bumperSpacingX * 0.5;
+      bumpers.push({
+        x: pad + bumperSpacingX * (c + 1) + offsetX,
+        y: bumperStartY + r * bumperSpacingY,
+        radius: 15
+      });
+    }
+  }
+
+  // Elevator belt on the right side
+  belts.push({
+    x: w - pad - 30,
+    y: h - pad,
+    w: 30,
+    h: h - 200,
+    speed: -150,
+    type: 'vertical'
+  });
+
+  // Top belt to drop marbles
+  belts.push({
+    x: w * 0.5,
+    y: 60,
+    w: 200,
+    h: 20,
+    speed: -80,
+    type: 'horizontal'
+  });
+
+  // Staircase on the left side
+  const stairCount = 6;
+  const stairStartY = h - pad;
+  const stairStepH = 30;
+  const stairStepW = 40;
+
+  for (let i = 0; i < stairCount; i++) {
+    stairs.push({
+      x: pad + 20,
+      y: stairStartY - (i + 1) * stairStepH,
+      w: stairStepW,
+      h: 8,
+      speed: 60,
+      angle: 0
+    });
+  }
+
+  // Spiral track section
+  const spiralCenterX = w * 0.3;
+  const spiralCenterY = h * 0.6;
+  const spiralRadius = 80;
+  const spiralSegments = 12;
+
+  for (let i = 0; i < spiralSegments; i++) {
+    const angle1 = (i / spiralSegments) * Math.PI * 2;
+    const angle2 = ((i + 1) / spiralSegments) * Math.PI * 2;
+    const y1 = spiralCenterY - 60 + (i / spiralSegments) * 120;
+    const y2 = spiralCenterY - 60 + ((i + 1) / spiralSegments) * 120;
+    const x1 = spiralCenterX + Math.cos(angle1) * spiralRadius;
+    const x2 = spiralCenterX + Math.cos(angle2) * spiralRadius;
+    rails.push({ x1, y1, x2, y2, type: 'spiral' });
+  }
+
+  // Collection tray at bottom
+  rails.push({ x1: pad + 50, y1: h - pad - 40, x2: w * 0.6, y2: h - pad - 40, type: 'tray' });
+  rails.push({ x1: w * 0.6, y1: h - pad - 40, x2: w * 0.6, y2: h - pad, type: 'wall' });
+
+  // Spinning paddles
+  const paddleColors = ['#e94560', '#f5a623', '#50e3c2', '#70a1ff', '#a29bfe', '#ff7f50'];
+  const paddlePositions = [
+    { x: w * 0.2, y: h * 0.35 },
+    { x: w * 0.5, y: h * 0.45 },
+    { x: w * 0.75, y: h * 0.55 },
+    { x: w * 0.35, y: h * 0.7 },
+    { x: w * 0.6, y: h * 0.8 },
+    { x: w * 0.45, y: h * 0.25 },
+  ];
+
+  for (let i = 0; i < paddlePositions.length; i++) {
+    paddles.push({
+      x: paddlePositions[i].x,
+      y: paddlePositions[i].y,
+      radius: 40,
+      bladeCount: 4,
+      bladeLength: 35,
+      bladeWidth: 6,
+      angle: 0,
+      speed: 2 + Math.random() * 2,
+      color: paddleColors[i % paddleColors.length],
+      direction: i % 2 === 0 ? 1 : -1
+    });
+  }
+}
+
+function saveStructure() {
+  const data = { rails, belts, stairs, funnels, bumpers, paddles };
+  localStorage.setItem('marbleStructure', JSON.stringify(data));
+}
+
+function loadStructure() {
+  const saved = localStorage.getItem('marbleStructure');
+  if (saved) {
+    try {
+      const data = JSON.parse(saved);
+      rails = data.rails || [];
+      belts = data.belts || [];
+      stairs = data.stairs || [];
+      funnels = data.funnels || [];
+      bumpers = data.bumpers || [];
+      paddles = data.paddles || [];
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  return false;
+}
+
+if (!loadStructure()) {
+  buildContraption();
+}
+
+canvas.addEventListener('mousedown', onPointerDown);
+canvas.addEventListener('mousemove', onPointerMove);
+canvas.addEventListener('mouseup', onPointerUp);
+canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+canvas.addEventListener('touchend', onTouchEnd, { passive: false });
+
+function getPointerPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  if (e.touches) return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function onTouchStart(e) { e.preventDefault(); onPointerDown(e); }
+function onTouchMove(e) { e.preventDefault(); onPointerMove(e); }
+function onTouchEnd(e) { e.preventDefault(); onPointerUp(e); }
+
+function onPointerDown(e) {
+  const pos = getPointerPos(e);
+
+  if (!editMode) {
+    if (marbles.length < 200) {
+      marbles.push({
+        x: pos.x, y: pos.y,
+        vx: (Math.random() - 0.5) * 50,
+        vy: 0,
+        r: marbleRadius,
+        color: randomColor(),
+        onBelt: false,
+        onStair: false
+      });
+    }
+    return;
+  }
+
+  // Check anchor hits first
+  const anchors = getAnchors();
+  for (const anchor of anchors) {
+    const dist = Math.hypot(pos.x - anchor.x, pos.y - anchor.y);
+    if (dist < anchorHitRadius) {
+      selectedElement = anchor.element;
+      selectedType = anchor.type;
+      selectedAnchor = anchor;
+      isDragging = true;
+      dragOffset = { x: pos.x - anchor.x, y: pos.y - anchor.y };
+      canvas.style.cursor = 'grabbing';
+      return;
+    }
+  }
+
+  // Check element hit
+  const hit = hitTestElement(pos.x, pos.y);
+  if (hit) {
+    selectedElement = hit.element;
+    selectedType = hit.type;
+    selectedAnchor = null;
+    isDragging = true;
+    dragOffset = { x: pos.x, y: pos.y, prevX: pos.x, prevY: pos.y };
+    canvas.style.cursor = 'move';
+  } else {
+    selectedElement = null;
+    selectedType = null;
+    selectedAnchor = null;
+  }
+}
+
+function onPointerMove(e) {
+  const pos = getPointerPos(e);
+
+  if (isDragging && selectedElement) {
+    if (selectedAnchor) {
+      // Move specific anchor point (both x and y together)
+      if (selectedAnchor.key === 'start') {
+        selectedElement.x1 = pos.x - dragOffset.x;
+        selectedElement.y1 = pos.y - dragOffset.y;
+      } else if (selectedAnchor.key === 'end') {
+        selectedElement.x2 = pos.x - dragOffset.x;
+        selectedElement.y2 = pos.y - dragOffset.y;
+      } else if (selectedAnchor.key === 'center') {
+        selectedElement.x = pos.x - dragOffset.x;
+        selectedElement.y = pos.y - dragOffset.y;
+      }
+    } else {
+      // Move entire element
+      const dx = pos.x - dragOffset.prevX;
+      const dy = pos.y - dragOffset.prevY;
+      if (selectedType === 'rail' || selectedType === 'funnel') {
+        selectedElement.x1 += dx;
+        selectedElement.y1 += dy;
+        selectedElement.x2 += dx;
+        selectedElement.y2 += dy;
+      } else if (selectedType === 'belt') {
+        selectedElement.x += dx;
+        selectedElement.y += dy;
+      } else if (selectedType === 'stair') {
+        selectedElement.x += dx;
+        selectedElement.y += dy;
+      } else if (selectedType === 'bumper') {
+        selectedElement.x += dx;
+        selectedElement.y += dy;
+      } else if (selectedType === 'paddle') {
+        selectedElement.x += dx;
+        selectedElement.y += dy;
+      }
+    }
+
+    dragOffset.prevX = pos.x;
+    dragOffset.prevY = pos.y;
+    return;
+  }
+
+  // Update cursor on hover
+  if (editMode) {
+    const anchors = getAnchors();
+    let hovering = false;
+    for (const anchor of anchors) {
+      const dist = Math.hypot(pos.x - anchor.x, pos.y - anchor.y);
+      if (dist < anchorHitRadius) {
+        hovering = true;
+        break;
+      }
+    }
+    if (!hovering && hitTestElement(pos.x, pos.y)) {
+      canvas.style.cursor = 'move';
+    } else if (hovering) {
+      canvas.style.cursor = 'crosshair';
+    } else {
+      canvas.style.cursor = editMode ? 'default' : 'crosshair';
+    }
+  }
+}
+
+function onPointerUp(e) {
+  if (isDragging && editMode) {
+    saveStructure();
+  }
+  isDragging = false;
+  dragOffset = { x: 0, y: 0 };
+  if (editMode) {
+    canvas.style.cursor = selectedElement ? 'move' : 'default';
+  }
+}
+
+function getAnchors() {
+  const anchors = [];
+
+  for (const rail of rails) {
+    anchors.push({ x: rail.x1, y: rail.y1, element: rail, type: 'rail', key: 'start' });
+    anchors.push({ x: rail.x2, y: rail.y2, element: rail, type: 'rail', key: 'end' });
+  }
+
+  for (const bumper of bumpers) {
+    anchors.push({ x: bumper.x, y: bumper.y, element: bumper, type: 'bumper', key: 'center' });
+  }
+
+  for (const belt of belts) {
+    anchors.push({ x: belt.x, y: belt.y, element: belt, type: 'belt', key: 'center' });
+  }
+
+  for (const stair of stairs) {
+    anchors.push({ x: stair.x, y: stair.y, element: stair, type: 'stair', key: 'center' });
+  }
+
+  for (const funnel of funnels) {
+    anchors.push({ x: funnel.x1, y: funnel.y1, element: funnel, type: 'funnel', key: 'start' });
+    anchors.push({ x: funnel.x2, y: funnel.y2, element: funnel, type: 'funnel', key: 'end' });
+  }
+
+  for (const paddle of paddles) {
+    anchors.push({ x: paddle.x, y: paddle.y, element: paddle, type: 'paddle', key: 'center' });
+  }
+
+  return anchors;
+}
+
+function hitTestElement(px, py) {
+  const hitRadius = 20;
+
+  for (const rail of rails) {
+    const closest = closestPointOnSegment(px, py, rail.x1, rail.y1, rail.x2, rail.y2);
+    const dist = Math.hypot(px - closest.x, py - closest.y);
+    if (dist < hitRadius) return { element: rail, type: 'rail' };
+  }
+
+  for (const bumper of bumpers) {
+    const dist = Math.hypot(px - bumper.x, py - bumper.y);
+    if (dist < bumper.radius + hitRadius) return { element: bumper, type: 'bumper' };
+  }
+
+  for (const belt of belts) {
+    if (belt.type === 'vertical') {
+      if (px > belt.x - hitRadius && px < belt.x + belt.w + hitRadius && py > belt.y - belt.h - hitRadius && py < belt.y + hitRadius) {
+        return { element: belt, type: 'belt' };
+      }
+    } else {
+      if (px > belt.x - belt.w/2 - hitRadius && px < belt.x + belt.w/2 + hitRadius && py > belt.y - hitRadius && py < belt.y + belt.h + hitRadius) {
+        return { element: belt, type: 'belt' };
+      }
+    }
+  }
+
+  for (const stair of stairs) {
+    if (px > stair.x - hitRadius && px < stair.x + stair.w + hitRadius && py > stair.y - hitRadius && py < stair.y + stair.h + hitRadius) {
+      return { element: stair, type: 'stair' };
+    }
+  }
+
+  for (const funnel of funnels) {
+    const closest = closestPointOnSegment(px, py, funnel.x1, funnel.y1, funnel.x2, funnel.y2);
+    const dist = Math.hypot(px - closest.x, py - closest.y);
+    if (dist < hitRadius) return { element: funnel, type: 'funnel' };
+  }
+
+  for (const paddle of paddles) {
+    const dist = Math.hypot(px - paddle.x, py - paddle.y);
+    if (dist < paddle.radius + hitRadius) return { element: paddle, type: 'paddle' };
+  }
+
+  return null;
+}
+
+document.getElementById('editBtn').addEventListener('click', () => {
+  editMode = !editMode;
+  document.getElementById('editBtn').classList.toggle('active', editMode);
+  document.getElementById('editBtn').textContent = editMode ? 'Play Mode' : 'Edit Mode';
+  document.getElementById('ui').textContent = editMode ? 'Click elements to select, drag anchors to move' : 'Click anywhere to add marbles!';
+  canvas.style.cursor = editMode ? 'default' : 'crosshair';
+  if (!editMode) {
+    selectedElement = null;
+    selectedType = null;
+    selectedAnchor = null;
+  }
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  marbles = [];
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  localStorage.removeItem('marbleStructure');
+  selectedElement = null;
+  selectedType = null;
+  selectedAnchor = null;
+  buildContraption();
+});
+
+function closestPointOnSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return { x: x1, y: y1 };
+  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return { x: x1 + t * dx, y: y1 + t * dy };
+}
+
+function updatePhysics(dt) {
+  dt = Math.min(dt, 0.02);
+
+  for (const m of marbles) {
+    // Gravity
+    m.vy += gravity * dt;
+
+    // Apply belt forces
+    m.onBelt = false;
+    for (const belt of belts) {
+      if (belt.type === 'vertical') {
+        if (m.x > belt.x && m.x < belt.x + belt.w && m.y > belt.y - belt.h && m.y < belt.y) {
+          m.vy = belt.speed;
+          m.onBelt = true;
+          m.vx *= 0.9;
+        }
+      } else if (belt.type === 'horizontal') {
+        if (m.x > belt.x - belt.w/2 && m.x < belt.x + belt.w/2 && m.y > belt.y - m.r && m.y < belt.y + belt.h) {
+          m.vx = belt.speed;
+          m.onBelt = true;
+          m.vy *= 0.5;
+        }
+      }
+    }
+
+    // Apply stair forces
+    m.onStair = false;
+    for (const stair of stairs) {
+      if (m.x > stair.x && m.x < stair.x + stair.w && m.y > stair.y - m.r - 2 && m.y < stair.y + stair.h) {
+        m.vy = -stair.speed;
+        m.onStair = true;
+        m.vx *= 0.8;
+      }
+    }
+
+    // Rail collision
+    if (!m.onBelt && !m.onStair) {
+      for (const rail of rails) {
+        const closest = closestPointOnSegment(m.x, m.y, rail.x1, rail.y1, rail.x2, rail.y2);
+        const dx = m.x - closest.x;
+        const dy = m.y - closest.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist < m.r && dist > 0.01) {
+          const nx = dx / dist;
+          const ny = dy / dist;
+
+          // Push marble out
+          m.x = closest.x + nx * m.r;
+          m.y = closest.y + ny * m.r;
+
+          // Reflect velocity
+          const dot = m.vx * nx + m.vy * ny;
+          if (dot < 0) {
+            m.vx -= (1 + restitution) * dot * nx;
+            m.vy -= (1 + restitution) * dot * ny;
+
+            // Apply friction along rail
+            const tx = -ny;
+            const ty = nx;
+            const tangentDot = m.vx * tx + m.vy * ty;
+            m.vx -= tx * tangentDot * 0.02;
+            m.vy -= ty * tangentDot * 0.02;
+          }
+        }
+      }
+    }
+
+    // Bumper collision
+    for (const bumper of bumpers) {
+      const dx = m.x - bumper.x;
+      const dy = m.y - bumper.y;
+      const dist = Math.hypot(dx, dy);
+      const minDist = m.r + bumper.radius;
+
+      if (dist < minDist && dist > 0.01) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        m.x = bumper.x + nx * minDist;
+        m.y = bumper.y + ny * minDist;
+
+        const dot = m.vx * nx + m.vy * ny;
+        m.vx -= 2 * dot * nx;
+        m.vy -= 2 * dot * ny;
+
+        // Add some bounce energy
+        m.vx *= 1.1;
+        m.vy *= 1.1;
+      }
+    }
+
+    // Funnel guidance
+    for (const funnel of funnels) {
+      const closest = closestPointOnSegment(m.x, m.y, funnel.x1, funnel.y1, funnel.x2, funnel.y2);
+      const dx = m.x - closest.x;
+      const dy = m.y - closest.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist < m.r + 30 && dist > 0.01) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const pushStrength = (m.r + 30 - dist) * 2;
+        m.vx += nx * pushStrength;
+        m.vy += ny * pushStrength;
+      }
+    }
+
+    // Paddle collision
+    for (const paddle of paddles) {
+      const dx = m.x - paddle.x;
+      const dy = m.y - paddle.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist < paddle.radius + m.r && dist > 0.01) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        // Check if marble is near a blade
+        let hitBlade = false;
+        for (let b = 0; b < paddle.bladeCount; b++) {
+          const bladeAngle = paddle.angle + (b / paddle.bladeCount) * Math.PI * 2;
+          const bladeDirX = Math.cos(bladeAngle);
+          const bladeDirY = Math.sin(bladeAngle);
+
+          // Project marble onto blade direction
+          const proj = dx * bladeDirX + dy * bladeDirY;
+          if (proj > 0 && proj < paddle.bladeLength) {
+            const perpDist = Math.abs(dx * bladeDirY - dy * bladeDirX);
+            if (perpDist < m.r + paddle.bladeWidth / 2) {
+              hitBlade = true;
+
+              // Push marble out along blade normal
+              const perpX = -bladeDirY;
+              const perpY = bladeDirX;
+              const pushDir = (dx * perpX + dy * perpY) > 0 ? 1 : -1;
+              m.x += perpX * pushDir * (m.r + paddle.bladeWidth / 2 - perpDist);
+              m.y += perpY * pushDir * (m.r + paddle.bladeWidth / 2 - perpDist);
+
+              // Add blade velocity to marble
+              const bladeSpeed = paddle.speed * paddle.direction * 200;
+              const bladeVx = -bladeDirY * bladeSpeed * paddle.direction;
+              const bladeVy = bladeDirX * bladeSpeed * paddle.direction;
+
+              m.vx += bladeVx * 0.3;
+              m.vy += bladeVy * 0.3;
+
+              // Bounce
+              const dot = m.vx * nx + m.vy * ny;
+              if (dot < 0) {
+                m.vx -= (1 + restitution) * dot * nx;
+                m.vy -= (1 + restitution) * dot * ny;
+              }
+
+              break;
+            }
+          }
+        }
+
+        // If not hitting a blade, push to edge of paddle radius
+        if (!hitBlade && dist < paddle.bladeWidth / 2 + m.r) {
+          m.x = paddle.x + nx * (paddle.bladeWidth / 2 + m.r);
+          m.y = paddle.y + ny * (paddle.bladeWidth / 2 + m.r);
+          const dot = m.vx * nx + m.vy * ny;
+          if (dot < 0) {
+            m.vx -= (1 + restitution) * dot * nx;
+            m.vy -= (1 + restitution) * dot * ny;
+          }
+        }
+      }
+    }
+
+    // Apply friction
+    m.vx *= friction;
+    m.vy *= friction;
+
+    // Update position
+    m.x += m.vx * dt;
+    m.y += m.vy * dt;
+
+    // Speed limit
+    const speed = Math.hypot(m.vx, m.vy);
+    if (speed > 1500) {
+      m.vx = (m.vx / speed) * 1500;
+      m.vy = (m.vy / speed) * 1500;
+    }
+  }
+
+  // Marble-marble collision
+  for (let i = 0; i < marbles.length; i++) {
+    for (let j = i + 1; j < marbles.length; j++) {
+      const a = marbles[i];
+      const b = marbles[j];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy);
+      const minDist = a.r + b.r;
+
+      if (dist < minDist && dist > 0.01) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const overlap = minDist - dist;
+
+        a.x -= nx * overlap * 0.5;
+        a.y -= ny * overlap * 0.5;
+        b.x += nx * overlap * 0.5;
+        b.y += ny * overlap * 0.5;
+
+        const dvx = a.vx - b.vx;
+        const dvy = a.vy - b.vy;
+        const dvDotN = dvx * nx + dvy * ny;
+
+        if (dvDotN > 0) {
+          a.vx -= dvDotN * nx * restitution;
+          a.vy -= dvDotN * ny * restitution;
+          b.vx += dvDotN * nx * restitution;
+          b.vy += dvDotN * ny * restitution;
+        }
+      }
+    }
+  }
+
+  // Remove marbles that escape
+  marbles = marbles.filter(m => m.y < H() + 100 && m.x > -100 && m.x < W() + 100);
+
+  document.getElementById('count').textContent = marbles.length;
+}
+
+function drawContraption() {
+  const w = W();
+  const h = H();
+
+  // Background
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#0f0c29');
+  grad.addColorStop(0.5, '#302b63');
+  grad.addColorStop(1, '#24243e');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Draw rails
+  for (const rail of rails) {
+    const isSelected = selectedElement === rail;
+    ctx.strokeStyle = isSelected ? 'rgba(245,166,35,0.8)' : 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = isSelected ? 6 : 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(rail.x1, rail.y1);
+    ctx.lineTo(rail.x2, rail.y2);
+    ctx.stroke();
+
+    // Glow effect
+    ctx.strokeStyle = isSelected ? 'rgba(245,166,35,0.15)' : 'rgba(100,200,255,0.1)';
+    ctx.lineWidth = isSelected ? 16 : 12;
+    ctx.beginPath();
+    ctx.moveTo(rail.x1, rail.y1);
+    ctx.lineTo(rail.x2, rail.y2);
+    ctx.stroke();
+  }
+
+  // Draw bumpers
+  for (const bumper of bumpers) {
+    const isSelected = selectedElement === bumper;
+    const grad = ctx.createRadialGradient(bumper.x - 3, bumper.y - 3, 2, bumper.x, bumper.y, bumper.radius);
+    grad.addColorStop(0, '#fff');
+    grad.addColorStop(0.5, isSelected ? '#f5a623' : '#70a1ff');
+    grad.addColorStop(1, isSelected ? '#8B6914' : '#0f3460');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(bumper.x, bumper.y, bumper.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = isSelected ? 'rgba(245,166,35,0.8)' : 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = isSelected ? 3 : 2;
+    ctx.beginPath();
+    ctx.arc(bumper.x, bumper.y, bumper.radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Draw belts
+  for (const belt of belts) {
+    const isSelected = selectedElement === belt;
+    ctx.fillStyle = isSelected ? 'rgba(245,166,35,0.3)' : 'rgba(80,227,194,0.3)';
+    ctx.strokeStyle = isSelected ? 'rgba(245,166,35,0.8)' : 'rgba(80,227,194,0.6)';
+    ctx.lineWidth = isSelected ? 3 : 2;
+
+    if (belt.type === 'vertical') {
+      ctx.fillRect(belt.x, belt.y - belt.h, belt.w, belt.h);
+      ctx.strokeRect(belt.x, belt.y - belt.h, belt.w, belt.h);
+
+      // Animated lines
+      const time = Date.now() * 0.002;
+      ctx.strokeStyle = isSelected ? 'rgba(245,166,35,0.4)' : 'rgba(80,227,194,0.4)';
+      ctx.lineWidth = 1;
+      for (let y = belt.y; y > belt.y - belt.h; y -= 20) {
+        const yy = y + (time * 30) % 20;
+        ctx.beginPath();
+        ctx.moveTo(belt.x + 2, yy);
+        ctx.lineTo(belt.x + belt.w - 2, yy);
+        ctx.stroke();
+      }
+    } else {
+      ctx.fillRect(belt.x - belt.w/2, belt.y, belt.w, belt.h);
+      ctx.strokeRect(belt.x - belt.w/2, belt.y, belt.w, belt.h);
+
+      const time = Date.now() * 0.002;
+      ctx.strokeStyle = isSelected ? 'rgba(245,166,35,0.4)' : 'rgba(80,227,194,0.4)';
+      ctx.lineWidth = 1;
+      for (let x = belt.x - belt.w/2; x < belt.x + belt.w/2; x += 15) {
+        const xx = x + (time * 20) % 15;
+        ctx.beginPath();
+        ctx.moveTo(xx, belt.y + 2);
+        ctx.lineTo(xx, belt.y + belt.h - 2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Draw stairs
+  for (const stair of stairs) {
+    const isSelected = selectedElement === stair;
+    ctx.fillStyle = isSelected ? 'rgba(245,166,35,0.6)' : 'rgba(245,166,35,0.5)';
+    ctx.strokeStyle = isSelected ? 'rgba(245,166,35,1)' : 'rgba(245,166,35,0.8)';
+    ctx.lineWidth = isSelected ? 3 : 2;
+    ctx.fillRect(stair.x, stair.y, stair.w, stair.h);
+    ctx.strokeRect(stair.x, stair.y, stair.w, stair.h);
+  }
+
+  // Draw paddles
+  for (const paddle of paddles) {
+    const isSelected = selectedElement === paddle;
+
+    // Draw blades
+    for (let b = 0; b < paddle.bladeCount; b++) {
+      const bladeAngle = paddle.angle + (b / paddle.bladeCount) * Math.PI * 2;
+      const bx = paddle.x + Math.cos(bladeAngle) * paddle.bladeLength;
+      const by = paddle.y + Math.sin(bladeAngle) * paddle.bladeLength;
+
+      ctx.strokeStyle = isSelected ? 'rgba(245,166,35,0.9)' : paddle.color;
+      ctx.lineWidth = paddle.bladeWidth;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(paddle.x, paddle.y);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+
+      // Glow
+      ctx.strokeStyle = isSelected ? 'rgba(245,166,35,0.15)' : paddle.color.replace(')', ',0.15)').replace('rgb', 'rgba');
+      ctx.lineWidth = paddle.bladeWidth + 8;
+      ctx.beginPath();
+      ctx.moveTo(paddle.x, paddle.y);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+    }
+
+    // Center hub
+    const hubGrad = ctx.createRadialGradient(paddle.x - 2, paddle.y - 2, 1, paddle.x, paddle.y, 8);
+    hubGrad.addColorStop(0, '#fff');
+    hubGrad.addColorStop(0.5, isSelected ? '#f5a623' : '#888');
+    hubGrad.addColorStop(1, isSelected ? '#8B6914' : '#444');
+    ctx.fillStyle = hubGrad;
+    ctx.beginPath();
+    ctx.arc(paddle.x, paddle.y, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Outer ring
+    ctx.strokeStyle = isSelected ? 'rgba(245,166,35,0.3)' : 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(paddle.x, paddle.y, paddle.radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Draw anchors in edit mode
+  if (editMode) {
+    drawAnchors();
+  }
+}
+
+function drawAnchors() {
+  // Draw rail/funnel anchors
+  for (const rail of rails) {
+    const isSelected = selectedElement === rail;
+    drawPlus(rail.x1, rail.y1, isSelected);
+    drawPlus(rail.x2, rail.y2, isSelected);
+  }
+
+  for (const funnel of funnels) {
+    const isSelected = selectedElement === funnel;
+    drawPlus(funnel.x1, funnel.y1, isSelected);
+    drawPlus(funnel.x2, funnel.y2, isSelected);
+  }
+
+  // Draw bumper center anchor
+  for (const bumper of bumpers) {
+    const isSelected = selectedElement === bumper;
+    drawPlus(bumper.x, bumper.y, isSelected);
+  }
+
+  // Draw belt/stair anchors
+  for (const belt of belts) {
+    const isSelected = selectedElement === belt;
+    drawPlus(belt.x, belt.y, isSelected);
+  }
+
+  for (const stair of stairs) {
+    const isSelected = selectedElement === stair;
+    drawPlus(stair.x, stair.y, isSelected);
+  }
+}
+
+function drawPlus(x, y, isSelected) {
+  const half = anchorSize / 2;
+  ctx.strokeStyle = isSelected ? '#f5a623' : 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = isSelected ? 2.5 : 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x - half, y);
+  ctx.lineTo(x + half, y);
+  ctx.moveTo(x, y - half);
+  ctx.lineTo(x, y + half);
+  ctx.stroke();
+}
+
+function drawMarbles() {
+  for (const m of marbles) {
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(m.x + 2, m.y + 2, m.r, m.r * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Marble
+    const grad = ctx.createRadialGradient(m.x - m.r*0.3, m.y - m.r*0.3, m.r*0.1, m.x, m.y, m.r);
+    grad.addColorStop(0, '#fff');
+    grad.addColorStop(0.3, m.color);
+    grad.addColorStop(1, shadeColor(m.color, -40));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.arc(m.x - m.r*0.25, m.y - m.r*0.25, m.r*0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function shadeColor(color, percent) {
+  const num = parseInt(color.replace('#', ''), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = Math.max(0, Math.min(255, (num >> 16) + amt));
+  const G = Math.max(0, Math.min(255, (num >> 8 & 0x00FF) + amt));
+  const B = Math.max(0, Math.min(255, (num & 0x0000FF) + amt));
+  return `rgb(${R},${G},${B})`;
+}
+
+let lastTime = performance.now();
+function gameLoop(time) {
+  const dt = (time - lastTime) / 1000;
+  lastTime = time;
+
+  updatePhysics(dt);
+
+  // Update paddle rotation
+  for (const paddle of paddles) {
+    paddle.angle += paddle.speed * paddle.direction * dt;
+  }
+
+  drawContraption();
+  drawMarbles();
+
+  requestAnimationFrame(gameLoop);
+}
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
