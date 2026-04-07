@@ -20,6 +20,11 @@ Flat playground of standalone HTML canvas games. No build step, no dependencies,
 | `shoot.html` | Slingshot 3D (finished) |
 | `marble.html` | Marble Machine 2D |
 
+## Rules
+
+- Each new app (`.html` file) MUST include a link back to home: `<a id="home-link" href="index.html">Home</a>`.
+- Each new app MUST be registered in `index.html` within the `<div id="links">` section.
+
 ## Notes
 
 - `marble.html` uses `localStorage` for persisting its own marble structure state — this is functional.
