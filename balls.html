@@ -77,11 +77,6 @@ canvas {
 </div>
 <canvas id="canvas"></canvas>
 <script>
-(function register() {
-  const registry = JSON.parse(localStorage.getItem('htmlRegistry') || '{}');
-  registry['balls.html'] = document.title;
-  localStorage.setItem('htmlRegistry', JSON.stringify(registry));
-})();
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const info = document.getElementById('info');

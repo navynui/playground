@@ -49,7 +49,11 @@
 </head>
 <body>
   <h1>Hello World</h1>
-  <div id="links"></div>
+  <div id="links">
+    <a href="balls.html">Ball Pit Simulator</a>
+    <a href="shoot.html">Slingshot 3D</a>
+    <a href="marble.html">Marble Machine 2D</a>
+  </div>
   <script>
     const gradients = [
       ['#667eea', '#764ba2'],
@@ -70,17 +74,6 @@
       const [c1, c2] = gradients[index];
       document.body.style.background = `linear-gradient(135deg, ${c1}, ${c2})`;
     });
-
-    const registry = JSON.parse(localStorage.getItem('htmlRegistry') || '{}');
-    const linksDiv = document.getElementById('links');
-    const currentPath = location.pathname.replace(/\/[^/]*$/, '/');
-    for (const [file, title] of Object.entries(registry)) {
-      if (file === 'index.html') continue;
-      const a = document.createElement('a');
-      a.href = file;
-      a.textContent = title;
-      linksDiv.appendChild(a);
-    }
   </script>
 </body>
 </html>

@@ -79,11 +79,6 @@ canvas {
 <div id="info">Marbles: <span id="count">0</span></div>
 <canvas id="game"></canvas>
 <script>
-(function register() {
-  const registry = JSON.parse(localStorage.getItem('htmlRegistry') || '{}');
-  registry['marble.html'] = document.title;
-  localStorage.setItem('htmlRegistry', JSON.stringify(registry));
-})();
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');

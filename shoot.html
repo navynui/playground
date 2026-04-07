@@ -85,11 +85,6 @@ canvas:active {
 <button id="anglesBtn">Show Angles</button>
 <canvas id="game"></canvas>
 <script>
-(function register() {
-  const registry = JSON.parse(localStorage.getItem('htmlRegistry') || '{}');
-  registry['shoot.html'] = document.title;
-  localStorage.setItem('htmlRegistry', JSON.stringify(registry));
-})();
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = () => canvas.width;

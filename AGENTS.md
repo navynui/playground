@@ -2,64 +2,25 @@
 
 ## Overview
 
-The app uses a simple file-based navigation system where HTML files register themselves in `localStorage` and `index.html` dynamically builds links from the registry.
+Flat playground of standalone HTML canvas games. No build step, no dependencies, no server needed. Open any `.html` file directly in a browser.
 
-## How It Works
+## Navigation
 
-### index.html (Hub)
+- `index.html` is the hub with static `<a>` links to all apps
+- Each child page has `<a id="home-link" href="index.html">Home</a>`
+- Click anywhere on `index.html` (except links) to cycle background gradients
+- To add a new app: create the `.html` file, add a Home link in it, and add a link in `index.html`'s `<div id="links">`
 
-- Reads `localStorage.getItem('htmlRegistry')` which is a JSON object mapping filenames to display titles
-- Iterates over all entries and creates `<a>` links for each registered file (except itself)
-- Located at the root: `/home/nui/dev/www/index.html`
-
-### Child Pages (balls.html, shoot.html)
-
-Each child page self-registers on load using an IIFE at the top of its `<script>` block:
-
-```js
-(function register() {
-  const registry = JSON.parse(localStorage.getItem('htmlRegistry') || '{}');
-  registry['filename.html'] = document.title;
-  localStorage.setItem('htmlRegistry', JSON.stringify(registry));
-})();
-```
-
-Each child page also includes a Home link:
-
-```html
-<a id="home-link" href="index.html">Home</a>
-```
-
-## Registered Apps
+## Apps
 
 | File | Title |
 |------|-------|
-| `index.html` | Hello World (hub, not self-registered) |
+| `index.html` | Hello World (hub) |
 | `balls.html` | Ball Pit Simulator |
-| `shoot.html` | Slingshot 3D |
+| `shoot.html` | Slingshot 3D (finished) |
+| `marble.html` | Marble Machine 2D |
 
-## File Structure
+## Notes
 
-```
-/home/nui/dev/www/
-├── index.html          # Hub page with dynamic links
-├── balls.html          # Ball pit simulator
-└── shoot.html          # 3D slingshot game
-```
-
-## Adding a New App
-
-1. Create a new `.html` file in `/home/nui/dev/www/`
-2. Add the registration IIFE at the top of the `<script>` block:
-   ```js
-   (function register() {
-     const registry = JSON.parse(localStorage.getItem('htmlRegistry') || '{}');
-     registry['yourfile.html'] = document.title;
-     localStorage.setItem('htmlRegistry', JSON.stringify(registry));
-   })();
-   ```
-3. Add a Home link in the HTML:
-   ```html
-   <a id="home-link" href="index.html">Home</a>
-   ```
-4. The app will automatically appear as a link on `index.html`
+- `marble.html` uses `localStorage` for persisting its own marble structure state — this is functional.
+- No linting, testing, or typecheck commands exist.
