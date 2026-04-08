@@ -1,226 +1,263 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
-<title>Ball Pit Simulator</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  background: #1a1a2e;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  font-family: 'Segoe UI', sans-serif;
-}
-canvas {
-  display: block;
-  cursor: crosshair;
-}
-#info {
-  position: fixed;
-  top: 16px;
-  left: 16px;
-  color: #eee;
-  font-size: 14px;
-  background: rgba(0,0,0,0.5);
-  padding: 8px 14px;
-  border-radius: 8px;
-  pointer-events: none;
-}
-#home-link {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  color: #eee;
-  text-decoration: none;
-  font-size: 14px;
-  background: rgba(0,0,0,0.5);
-  padding: 8px 14px;
-  border-radius: 8px;
-  transition: background 0.2s;
-}
-#home-link:hover {
-  background: rgba(0,0,0,0.7);
-}
-#controls {
-  position: fixed;
-  top: 56px;
-  right: 16px;
-  color: #eee;
-  font-size: 14px;
-  background: rgba(0,0,0,0.5);
-  padding: 14px 18px;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-#controls label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-#controls input[type="range"] {
-  width: 120px;
-  accent-color: #764ba2;
-}
-</style>
-</head>
-<body>
-<div id="info">Click to add balls</div>
-<a id="home-link" href="index.html">Home</a>
-<div id="controls">
-  <label>Gravity: <input type="range" id="gravitySlider" min="0" max="2" step="0.05" value="0.4"><span id="gravityVal">0.4</span></label>
-  <label>Bounciness: <input type="range" id="bounceSlider" min="0" max="1" step="0.05" value="0.7"><span id="bounceVal">0.7</span></label>
-</div>
-<canvas id="canvas"></canvas>
-<script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const info = document.getElementById('info');
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="icon" href="icon.svg" type="image/svg+xml" />
+        <title>Ball Pit Simulator</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                background: #1a1a2e;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                font-family: "Segoe UI", sans-serif;
+            }
+            canvas {
+                display: block;
+                cursor: crosshair;
+            }
+            #info {
+                position: fixed;
+                top: 16px;
+                left: 16px;
+                color: #eee;
+                font-size: 14px;
+                background: rgba(0, 0, 0, 0.5);
+                padding: 8px 14px;
+                border-radius: 8px;
+                pointer-events: none;
+            }
+            #home-link {
+                position: fixed;
+                top: 16px;
+                right: 16px;
+                color: #eee;
+                text-decoration: none;
+                font-size: 14px;
+                background: rgba(0, 0, 0, 0.5);
+                padding: 8px 14px;
+                border-radius: 8px;
+                transition: background 0.2s;
+            }
+            #home-link:hover {
+                background: rgba(0, 0, 0, 0.7);
+            }
+            #controls {
+                position: fixed;
+                top: 56px;
+                right: 16px;
+                color: #eee;
+                font-size: 14px;
+                background: rgba(0, 0, 0, 0.5);
+                padding: 14px 18px;
+                border-radius: 8px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            #controls label {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            #controls input[type="range"] {
+                width: 120px;
+                accent-color: #764ba2;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="info">Left-click: +1 ball | Right-click: +10 balls</div>
+        <a id="home-link" href="index.html">Home</a>
+        <div id="controls">
+            <label
+                >Gravity:
+                <input
+                    type="range"
+                    id="gravitySlider"
+                    min="0"
+                    max="2"
+                    step="0.05"
+                    value="0.4"
+                /><span id="gravityVal">0.4</span></label
+            >
+            <label
+                >Bounciness:
+                <input
+                    type="range"
+                    id="bounceSlider"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="0.7"
+                /><span id="bounceVal">0.7</span></label
+            >
+        </div>
+        <canvas id="canvas"></canvas>
+        <script>
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+            const info = document.getElementById("info");
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
 
-const FRICTION = 0.99;
-const BALL_RADIUS = 18;
-const balls = [];
-let GRAVITY = 0.4;
-let BOUNCE = 0.7;
+            const FRICTION = 0.99;
+            const BALL_RADIUS = 18;
+            const balls = [];
+            let GRAVITY = 0.4;
+            let BOUNCE = 0.7;
 
-const gravitySlider = document.getElementById('gravitySlider');
-const bounceSlider = document.getElementById('bounceSlider');
-const gravityVal = document.getElementById('gravityVal');
-const bounceVal = document.getElementById('bounceVal');
+            const gravitySlider = document.getElementById("gravitySlider");
+            const bounceSlider = document.getElementById("bounceSlider");
+            const gravityVal = document.getElementById("gravityVal");
+            const bounceVal = document.getElementById("bounceVal");
 
-gravitySlider.addEventListener('input', () => {
-  GRAVITY = parseFloat(gravitySlider.value);
-  gravityVal.textContent = GRAVITY.toFixed(2);
-});
+            gravitySlider.addEventListener("input", () => {
+                GRAVITY = parseFloat(gravitySlider.value);
+                gravityVal.textContent = GRAVITY.toFixed(2);
+            });
 
-bounceSlider.addEventListener('input', () => {
-  BOUNCE = parseFloat(bounceSlider.value);
-  bounceVal.textContent = BOUNCE.toFixed(2);
-});
+            bounceSlider.addEventListener("input", () => {
+                BOUNCE = parseFloat(bounceSlider.value);
+                bounceVal.textContent = BOUNCE.toFixed(2);
+            });
 
-function randomColor() {
-  const hue = Math.random() * 360;
-  return `hsl(${hue}, 80%, 60%)`;
-}
+            function randomColor() {
+                const hue = Math.random() * 360;
+                return `hsl(${hue}, 80%, 60%)`;
+            }
 
-class Ball {
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-    this.vx = (Math.random() - 0.5) * 10;
-    this.vy = (Math.random() - 0.5) * 10;
-    this.radius = BALL_RADIUS;
-    this.color = randomColor();
-    this.mass = this.radius * this.radius;
-  }
+            class Ball {
+                constructor(x, y) {
+                    this.x = x;
+                    this.y = y;
+                    this.vx = (Math.random() - 0.5) * 10;
+                    this.vy = (Math.random() - 0.5) * 10;
+                    this.radius = BALL_RADIUS;
+                    this.color = randomColor();
+                    this.mass = this.radius * this.radius;
+                }
 
-  update() {
-    this.vy += GRAVITY;
-    this.vx *= FRICTION;
-    this.vy *= FRICTION;
-    this.x += this.vx;
-    this.y += this.vy;
+                update() {
+                    this.vy += GRAVITY;
+                    this.vx *= FRICTION;
+                    this.vy *= FRICTION;
+                    this.x += this.vx;
+                    this.y += this.vy;
 
-    if (this.y + this.radius > canvas.height) {
-      this.y = canvas.height - this.radius;
-      this.vy *= -BOUNCE;
-    }
-    if (this.y - this.radius < 0) {
-      this.y = this.radius;
-      this.vy *= -BOUNCE;
-    }
-    if (this.x + this.radius > canvas.width) {
-      this.x = canvas.width - this.radius;
-      this.vx *= -BOUNCE;
-    }
-    if (this.x - this.radius < 0) {
-      this.x = this.radius;
-      this.vx *= -BOUNCE;
-    }
-  }
+                    if (this.y + this.radius > canvas.height) {
+                        this.y = canvas.height - this.radius;
+                        this.vy *= -BOUNCE;
+                    }
+                    if (this.y - this.radius < 0) {
+                        this.y = this.radius;
+                        this.vy *= -BOUNCE;
+                    }
+                    if (this.x + this.radius > canvas.width) {
+                        this.x = canvas.width - this.radius;
+                        this.vx *= -BOUNCE;
+                    }
+                    if (this.x - this.radius < 0) {
+                        this.x = this.radius;
+                        this.vx *= -BOUNCE;
+                    }
+                }
 
-  draw() {
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    ctx.fillStyle = this.color;
-    ctx.fill();
+                draw() {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.fill();
 
-    ctx.beginPath();
-    ctx.arc(this.x - this.radius * 0.3, this.y - this.radius * 0.3, this.radius * 0.35, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.fill();
-  }
-}
+                    ctx.beginPath();
+                    ctx.arc(
+                        this.x - this.radius * 0.3,
+                        this.y - this.radius * 0.3,
+                        this.radius * 0.35,
+                        0,
+                        Math.PI * 2,
+                    );
+                    ctx.fillStyle = "rgba(255,255,255,0.3)";
+                    ctx.fill();
+                }
+            }
 
-function resolveCollision(b1, b2) {
-  const dx = b2.x - b1.x;
-  const dy = b2.y - b1.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  const minDist = b1.radius + b2.radius;
+            function resolveCollision(b1, b2) {
+                const dx = b2.x - b1.x;
+                const dy = b2.y - b1.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const minDist = b1.radius + b2.radius;
 
-  if (dist < minDist) {
-    const nx = dx / dist;
-    const ny = dy / dist;
+                if (dist < minDist) {
+                    const nx = dx / dist;
+                    const ny = dy / dist;
 
-    const overlap = minDist - dist;
-    b1.x -= nx * overlap * 0.5;
-    b1.y -= ny * overlap * 0.5;
-    b2.x += nx * overlap * 0.5;
-    b2.y += ny * overlap * 0.5;
+                    const overlap = minDist - dist;
+                    b1.x -= nx * overlap * 0.5;
+                    b1.y -= ny * overlap * 0.5;
+                    b2.x += nx * overlap * 0.5;
+                    b2.y += ny * overlap * 0.5;
 
-    const dvx = b1.vx - b2.vx;
-    const dvy = b1.vy - b2.vy;
-    const dvDotN = dvx * nx + dvy * ny;
+                    const dvx = b1.vx - b2.vx;
+                    const dvy = b1.vy - b2.vy;
+                    const dvDotN = dvx * nx + dvy * ny;
 
-    if (dvDotN > 0) {
-      const massSum = b1.mass + b2.mass;
-      const impulse = 2 * dvDotN / massSum;
+                    if (dvDotN > 0) {
+                        const massSum = b1.mass + b2.mass;
+                        const impulse = (2 * dvDotN) / massSum;
 
-      b1.vx -= impulse * b2.mass * nx * BOUNCE;
-      b1.vy -= impulse * b2.mass * ny * BOUNCE;
-      b2.vx += impulse * b1.mass * nx * BOUNCE;
-      b2.vy += impulse * b1.mass * ny * BOUNCE;
-    }
-  }
-}
+                        b1.vx -= impulse * b2.mass * nx * BOUNCE;
+                        b1.vy -= impulse * b2.mass * ny * BOUNCE;
+                        b2.vx += impulse * b1.mass * nx * BOUNCE;
+                        b2.vy += impulse * b1.mass * ny * BOUNCE;
+                    }
+                }
+            }
 
-function animate() {
-  ctx.fillStyle = 'rgba(26, 26, 46, 0.3)';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+            function animate() {
+                ctx.fillStyle = "rgba(26, 26, 46, 0.3)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  for (let i = 0; i < balls.length; i++) {
-    for (let j = i + 1; j < balls.length; j++) {
-      resolveCollision(balls[i], balls[j]);
-    }
-  }
+                for (let i = 0; i < balls.length; i++) {
+                    for (let j = i + 1; j < balls.length; j++) {
+                        resolveCollision(balls[i], balls[j]);
+                    }
+                }
 
-  for (const ball of balls) {
-    ball.update();
-    ball.draw();
-  }
+                for (const ball of balls) {
+                    ball.update();
+                    ball.draw();
+                }
 
-  info.textContent = `Balls: ${balls.length}`;
-  requestAnimationFrame(animate);
-}
+                info.textContent = `Balls: ${balls.length}`;
+                requestAnimationFrame(animate);
+            }
 
-canvas.addEventListener('click', (e) => {
-  balls.push(new Ball(e.clientX, e.clientY));
-});
+            canvas.addEventListener("click", (e) => {
+                balls.push(new Ball(e.clientX, e.clientY));
+            });
 
-window.addEventListener('resize', () => {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-});
+            canvas.addEventListener("contextmenu", (e) => {
+                e.preventDefault();
+                for (let i = 0; i < 10; i++) {
+                    balls.push(new Ball(e.clientX, e.clientY));
+                }
+            });
 
-animate();
-</script>
-</body>
+            window.addEventListener("resize", () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            });
+
+            animate();
+        </script>
+    </body>
 </html>

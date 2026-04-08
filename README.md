@@ -13,6 +13,7 @@ Standalone HTML canvas games. No build step, no dependencies, no server needed.
 | `shoot.html` | Slingshot 3D |
 | `marble.html` | Marble Machine 2D |
 | `liquid.html` | Liquid Simulation |
+| `mechanics.html` | Mechanics Simulation |
 
 ## Usage
 
