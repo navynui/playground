@@ -120,7 +120,7 @@
         </style>
     </head>
     <body>
-        <div id="ui">Left-click: +1 marble | Right-click: +10 marbles</div>
+        <div id="ui">Left-click: +1 marble | Ctrl-click: +10 marbles</div>
         <a id="home-link" href="index.html">Home</a>
         <button id="editBtn">Edit Mode</button>
         <button id="clearBtn">Clear Marbles</button>
@@ -419,26 +419,6 @@
             }
 
             canvas.addEventListener("mousedown", onPointerDown);
-            canvas.addEventListener("contextmenu", (e) => {
-                if (!editMode) {
-                    e.preventDefault();
-                    const pos = getPointerPos(e);
-                    for (let i = 0; i < 10; i++) {
-                        if (marbles.length < 200) {
-                            marbles.push({
-                                x: pos.x,
-                                y: pos.y,
-                                vx: (Math.random() - 0.5) * 50,
-                                vy: (Math.random() - 0.5) * 10,
-                                r: marbleRadius,
-                                color: randomColor(),
-                                onBelt: false,
-                                onStair: false,
-                            });
-                        }
-                    }
-                }
-            });
             canvas.addEventListener("mousemove", onPointerMove);
             canvas.addEventListener("mouseup", onPointerUp);
             canvas.addEventListener("touchstart", onTouchStart, {
@@ -476,17 +456,20 @@
                 const pos = getPointerPos(e);
 
                 if (!editMode) {
-                    if (marbles.length < 200) {
-                        marbles.push({
-                            x: pos.x,
-                            y: pos.y,
-                            vx: (Math.random() - 0.5) * 50,
-                            vy: 0,
-                            r: marbleRadius,
-                            color: randomColor(),
-                            onBelt: false,
-                            onStair: false,
-                        });
+                    const count = e.ctrlKey ? 10 : 1;
+                    for (let i = 0; i < count; i++) {
+                        if (marbles.length < 200) {
+                            marbles.push({
+                                x: pos.x,
+                                y: pos.y,
+                                vx: (Math.random() - 0.5) * 50,
+                                vy: 0,
+                                r: marbleRadius,
+                                color: randomColor(),
+                                onBelt: false,
+                                onStair: false,
+                            });
+                        }
                     }
                     return;
                 }

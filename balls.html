@@ -74,7 +74,7 @@
         </style>
     </head>
     <body>
-        <div id="info">Left-click: +1 ball | Right-click: +10 balls</div>
+        <div id="info">Left-click: +1 ball | Ctrl-click: +10 balls</div>
         <a id="home-link" href="index.html">Home</a>
         <div id="controls">
             <label
@@ -242,12 +242,8 @@
             }
 
             canvas.addEventListener("click", (e) => {
-                balls.push(new Ball(e.clientX, e.clientY));
-            });
-
-            canvas.addEventListener("contextmenu", (e) => {
-                e.preventDefault();
-                for (let i = 0; i < 10; i++) {
+                const count = e.ctrlKey ? 10 : 1;
+                for (let i = 0; i < count; i++) {
                     balls.push(new Ball(e.clientX, e.clientY));
                 }
             });
