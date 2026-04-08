@@ -193,7 +193,7 @@
             function resolveCollision(b1, b2) {
                 const dx = b2.x - b1.x;
                 const dy = b2.y - b1.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+                const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
                 const minDist = b1.radius + b2.radius;
 
                 if (dist < minDist) {
@@ -244,7 +244,10 @@
             canvas.addEventListener("click", (e) => {
                 const count = e.ctrlKey ? 10 : 1;
                 for (let i = 0; i < count; i++) {
-                    balls.push(new Ball(e.clientX, e.clientY));
+                    // Add a tiny random offset to prevent exact overlapping which causes NaN in physics
+                    const ox = (Math.random() - 0.5) * 2;
+                    const oy = (Math.random() - 0.5) * 2;
+                    balls.push(new Ball(e.clientX + ox, e.clientY + oy));
                 }
             });
 
