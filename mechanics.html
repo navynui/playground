@@ -468,6 +468,8 @@
             }
 
             function update() {
+                joints.forEach((j) => (j.isDriven = false));
+
                 links.forEach((l) => {
                     if (l.isCrank) {
                         const rps = l.rpm / 60;
@@ -475,6 +477,8 @@
                         l.angle += deltaTheta;
                         l.b.x = l.a.x + Math.cos(l.angle) * l.length;
                         l.b.y = l.a.y + Math.sin(l.angle) * l.length;
+                        l.a.isDriven = true;
+                        l.b.isDriven = true;
                     }
                 });
 
@@ -485,19 +489,29 @@
                         const dy = l.b.y - l.a.y;
                         const dist = Math.sqrt(dx * dx + dy * dy);
                         const diff = (l.length - dist) / (dist || 1);
-                        const offsetX = dx * diff * 0.5;
-                        const offsetY = dy * diff * 0.5;
-                        if (!l.a.fixed) {
+
+                        const aFixed = l.a.fixed || l.a.isDriven;
+                        const bFixed = l.b.fixed || l.b.isDriven;
+
+                        if (aFixed && bFixed) return;
+
+                        if (aFixed) {
+                            l.b.x += dx * diff;
+                            l.b.y += dy * diff;
+                        } else if (bFixed) {
+                            l.a.x -= dx * diff;
+                            l.a.y -= dy * diff;
+                        } else {
+                            const offsetX = dx * diff * 0.5;
+                            const offsetY = dy * diff * 0.5;
                             l.a.x -= offsetX;
                             l.a.y -= offsetY;
-                        }
-                        if (!l.b.fixed) {
                             l.b.x += offsetX;
                             l.b.y += offsetY;
                         }
                     });
                     joints.forEach((j) => {
-                        if (j.fixed) return;
+                        if (j.fixed || j.isDriven) return;
                         if (j.constraint === "x") j.x = j.startX;
                         else if (j.constraint === "y") j.y = j.startY;
                     });
