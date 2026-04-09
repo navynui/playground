@@ -169,6 +169,20 @@
                     <button id="mirrorVBtn">Mirror V</button>
                     <button id="rotateLBtn">Rotate L</button>
                     <button id="rotateRBtn">Rotate R</button>
+                    <input
+                        type="color"
+                        id="linkColorPicker"
+                        title="Link Color"
+                        value="#4facfe"
+                        style="
+                            padding: 0;
+                            height: 28px;
+                            width: 28px;
+                            cursor: pointer;
+                            border: none;
+                            background: transparent;
+                        "
+                    />
                 </div>
             </div>
         </div>
@@ -320,6 +334,7 @@
                     this.isCrank = isCrank;
                     this.rpm = 30;
                     this.angle = 0;
+                    this.color = isCrank ? "#f5a623" : "#4facfe";
                     this.id = Math.random().toString(36).substr(2, 9);
                 }
             }
@@ -343,6 +358,7 @@
                         isCrank: l.isCrank,
                         rpm: l.rpm,
                         angle: l.angle,
+                        color: l.color,
                         id: l.id,
                     })),
                     selectedIds: Array.from(selectedIds),
@@ -372,6 +388,7 @@
                         const l = new Link(ja, jb, sl.length, sl.isCrank);
                         l.rpm = sl.rpm;
                         l.angle = sl.angle;
+                        if (sl.color) l.color = sl.color;
                         l.id = sl.id;
                         return l;
                     })
@@ -410,6 +427,7 @@
                         isCrank: l.isCrank,
                         rpm: 0,
                         angle: l.angle,
+                        color: l.color,
                         id: l.id,
                     })),
                 };
@@ -441,6 +459,7 @@
                             const l = new Link(ja, jb, sl.length, sl.isCrank);
                             l.rpm = sl.rpm;
                             l.angle = sl.angle;
+                            if (sl.color) l.color = sl.color;
                             l.id = sl.id;
                             return l;
                         })
@@ -588,7 +607,8 @@
                         (selectedIds.has(l.a.id) && selectedIds.has(l.b.id));
                     const halfSelected =
                         selectedIds.has(l.a.id) || selectedIds.has(l.b.id);
-                    ctx.strokeStyle = l.isCrank ? "#f5a623" : "#4facfe";
+                    ctx.strokeStyle =
+                        l.color || (l.isCrank ? "#f5a623" : "#4facfe");
                     if (isSelected) {
                         ctx.strokeStyle = "#00f2fe";
                         ctx.shadowBlur = 10;
@@ -1096,6 +1116,7 @@
                     const nl = new Link(ja, jb, cl.length, cl.isCrank);
                     nl.rpm = cl.rpm;
                     nl.angle = cl.angle;
+                    if (cl.color) nl.color = cl.color;
                     return nl;
                 });
                 joints.push(...newJoints);
@@ -1173,11 +1194,34 @@
             document
                 .getElementById("rotateLBtn")
                 .addEventListener("click", () =>
-                    rotateSelection(-Math.PI / 12),
+                    rotateSelection(-Math.PI / 180),
                 );
             document
                 .getElementById("rotateRBtn")
-                .addEventListener("click", () => rotateSelection(Math.PI / 12));
+                .addEventListener("click", () =>
+                    rotateSelection(Math.PI / 180),
+                );
+
+            let colorUndoPushed = false;
+            document
+                .getElementById("linkColorPicker")
+                .addEventListener("input", (e) => {
+                    const newColor = e.target.value;
+                    links.forEach((l) => {
+                        if (selectedIds.has(l.id)) {
+                            if (!colorUndoPushed) {
+                                pushUndo();
+                                colorUndoPushed = true;
+                            }
+                            l.color = newColor;
+                        }
+                    });
+                });
+            document
+                .getElementById("linkColorPicker")
+                .addEventListener("change", () => {
+                    colorUndoPushed = false;
+                });
 
             document.getElementById("undoBtn").addEventListener("click", undo);
 
