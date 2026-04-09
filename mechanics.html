@@ -151,8 +151,56 @@
                     <button id="stopCranksBtn" style="background: #553">
                         Stop Cranks
                     </button>
-                    <button id="saveBtn" style="background: #353">
+                    <button
+                        id="saveBtn"
+                        style="background: #353"
+                        title="Save to Browser"
+                    >
                         Save State
+                    </button>
+                    <button
+                        id="exportBtn"
+                        style="background: #353"
+                        title="Export to File"
+                    >
+                        <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <path
+                                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                            />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                    </button>
+                    <button
+                        id="importBtn"
+                        style="background: #353"
+                        title="Import from File"
+                    >
+                        <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <path
+                                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                            />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
                     </button>
                     <button id="clearTracesBtn" style="background: #335">
                         Clear Traces
@@ -1292,6 +1340,98 @@
                 .getElementById("linkColorPicker")
                 .addEventListener("change", () => {
                     colorUndoPushed = false;
+                });
+
+            document
+                .getElementById("exportBtn")
+                .addEventListener("click", () => {
+                    const state = {
+                        joints: joints.map((j) => ({
+                            x: j.x,
+                            y: j.y,
+                            fixed: j.fixed,
+                            constraint: j.constraint,
+                            startX: j.startX,
+                            startY: j.startY,
+                            trace: j.trace,
+                            id: j.id,
+                        })),
+                        links: links.map((l) => ({
+                            aId: l.a.id,
+                            bId: l.b.id,
+                            length: l.length,
+                            isCrank: l.isCrank,
+                            rpm: l.rpm,
+                            angle: l.angle,
+                            color: l.color,
+                            id: l.id,
+                        })),
+                    };
+                    const blob = new Blob([JSON.stringify(state, null, 2)], {
+                        type: "application/json",
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "mechanism.json";
+                    a.click();
+                    URL.revokeObjectURL(url);
+                });
+
+            document
+                .getElementById("importBtn")
+                .addEventListener("click", () => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = ".json";
+                    input.onchange = (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            try {
+                                const state = JSON.parse(e.target.result);
+                                pushUndo();
+                                joints = state.joints.map((sj) => {
+                                    const j = new Joint(sj.x, sj.y, sj.fixed);
+                                    j.id = sj.id;
+                                    j.constraint = sj.constraint || "none";
+                                    j.startX = sj.startX ?? sj.x;
+                                    j.startY = sj.startY ?? sj.y;
+                                    j.trace = sj.trace;
+                                    return j;
+                                });
+                                links = state.links
+                                    .map((sl) => {
+                                        const ja = joints.find(
+                                            (j) => j.id === sl.aId,
+                                        );
+                                        const jb = joints.find(
+                                            (j) => j.id === sl.bId,
+                                        );
+                                        if (!ja || !jb) return null;
+                                        const l = new Link(
+                                            ja,
+                                            jb,
+                                            sl.length,
+                                            sl.isCrank,
+                                        );
+                                        l.rpm = sl.rpm;
+                                        l.angle = sl.angle;
+                                        if (sl.color) l.color = sl.color;
+                                        l.id = sl.id;
+                                        return l;
+                                    })
+                                    .filter((l) => l !== null);
+                                selectedIds.clear();
+                                selectObject(null, null);
+                            } catch (err) {
+                                alert("Failed to load file: " + err.message);
+                            }
+                        };
+                        reader.readAsText(file);
+                    };
+                    input.click();
                 });
 
             document.getElementById("undoBtn").addEventListener("click", undo);
