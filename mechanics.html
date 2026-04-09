@@ -148,8 +148,39 @@
             <div class="panel">
                 <h3>Control</h3>
                 <div class="btn-group">
-                    <button id="stopCranksBtn" style="background: #553">
-                        Stop Cranks
+                    <button
+                        id="playPauseBtn"
+                        style="background: #553"
+                        title="Play/Pause"
+                    >
+                        <svg
+                            id="pauseIcon"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <rect x="6" y="4" width="4" height="16"></rect>
+                            <rect x="14" y="4" width="4" height="16"></rect>
+                        </svg>
+                        <svg
+                            id="playIcon"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            style="display: none"
+                        >
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
                     </button>
                     <button
                         id="saveBtn"
@@ -420,6 +451,7 @@
             const CM_TO_PX = 2;
             let joints = [];
             let links = [];
+            let isPaused = false;
             let selectedIds = new Set();
             let selectedType = null; // 'joint', 'link'
             let clipboard = null;
@@ -612,9 +644,11 @@
 
                 links.forEach((l) => {
                     if (l.isCrank) {
-                        const rps = l.rpm / 60;
-                        const deltaTheta = (rps * 2 * Math.PI) / 60;
-                        l.angle += deltaTheta;
+                        if (!isPaused) {
+                            const rps = l.rpm / 60;
+                            const deltaTheta = (rps * 2 * Math.PI) / 60;
+                            l.angle += deltaTheta;
+                        }
                         l.b.x = l.a.x + Math.cos(l.angle) * l.length;
                         l.b.y = l.a.y + Math.sin(l.angle) * l.length;
                         l.a.isDriven = true;
@@ -1437,18 +1471,14 @@
             document.getElementById("undoBtn").addEventListener("click", undo);
 
             document
-                .getElementById("stopCranksBtn")
+                .getElementById("playPauseBtn")
                 .addEventListener("click", () => {
-                    pushUndo();
-                    links.forEach((l) => {
-                        if (l.isCrank) l.rpm = 0;
-                    });
-                    if (selectedIds.size > 0) {
-                        const rInput = document.getElementById("crankRPM");
-                        const nInput = document.getElementById("crankRPMNum");
-                        if (rInput) rInput.value = 0;
-                        if (nInput) nInput.value = 0;
-                    }
+                    isPaused = !isPaused;
+                    document.getElementById("playIcon").style.display = isPaused
+                        ? "inline"
+                        : "none";
+                    document.getElementById("pauseIcon").style.display =
+                        isPaused ? "none" : "inline";
                 });
 
             document.getElementById("saveBtn").addEventListener("click", () => {
