@@ -360,6 +360,27 @@
                     </div>
                 </div>
                 <div class="control-row">
+                    <label>Angle (deg)</label>
+                    <div style="display: flex; gap: 5px; align-items: center">
+                        <input
+                            type="range"
+                            id="crankAngle"
+                            min="0"
+                            max="360"
+                            step="1"
+                            value="0"
+                        />
+                        <input
+                            type="number"
+                            id="crankAngleNum"
+                            min="0"
+                            max="360"
+                            step="1"
+                            value="0"
+                        />
+                    </div>
+                </div>
+                <div class="control-row">
                     <label>Arm (cm)</label>
                     <div style="display: flex; gap: 5px; align-items: center">
                         <input
@@ -376,6 +397,14 @@
                             step="0.1"
                             value="50"
                         />
+                    </div>
+                </div>
+                <div class="control-row">
+                    <label>Quick Start</label>
+                    <div class="btn-group" style="justify-content: flex-end">
+                        <button id="crankStop" style="background: #e94560">Stop</button>
+                        <button id="crankCW" title="Clockwise">CW</button>
+                        <button id="crankCCW" title="Counter-Clockwise">CCW</button>
                     </div>
                 </div>
             </div>
@@ -1040,6 +1069,13 @@
                         document.getElementById("crankLen").value = len;
                         document.getElementById("crankLenNum").value =
                             len.toFixed(1);
+
+                        const deg =
+                            ((link.angle * 180) / Math.PI + 360) % 360;
+                        document.getElementById("crankAngle").value =
+                            deg.toFixed(0);
+                        document.getElementById("crankAngleNum").value =
+                            deg.toFixed(0);
                     } else {
                         const len = link.length / CM_TO_PX;
                         document.getElementById("linkLen").value = len;
@@ -1516,6 +1552,48 @@
                 selectedIds.forEach((id) => {
                     const l = links.find((li) => li.id === id);
                     if (l && l.isCrank) l.rpm = val;
+                });
+            });
+
+            document.getElementById("crankStop").addEventListener("click", () => {
+                selectedIds.forEach((id) => {
+                    const l = links.find((li) => li.id === id);
+                    if (l && l.isCrank) {
+                        l.rpm = 0;
+                        document.getElementById("crankRPM").value = 0;
+                        document.getElementById("crankRPMNum").value = "0.0";
+                    }
+                });
+            });
+
+            document.getElementById("crankCW").addEventListener("click", () => {
+                selectedIds.forEach((id) => {
+                    const l = links.find((li) => li.id === id);
+                    if (l && l.isCrank) {
+                        l.rpm = 30;
+                        document.getElementById("crankRPM").value = 30;
+                        document.getElementById("crankRPMNum").value = "30.0";
+                    }
+                });
+            });
+
+            document.getElementById("crankCCW").addEventListener("click", () => {
+                selectedIds.forEach((id) => {
+                    const l = links.find((li) => li.id === id);
+                    if (l && l.isCrank) {
+                        l.rpm = -30;
+                        document.getElementById("crankRPM").value = -30;
+                        document.getElementById("crankRPMNum").value = "-30.0";
+                    }
+                });
+            });
+
+            syncRangeNum("crankAngle", "crankAngleNum", (val) => {
+                selectedIds.forEach((id) => {
+                    const l = links.find((li) => li.id === id);
+                    if (l && l.isCrank) {
+                        l.angle = (val * Math.PI) / 180;
+                    }
                 });
             });
 
