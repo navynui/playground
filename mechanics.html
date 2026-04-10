@@ -319,20 +319,22 @@
                             <path d="M21 3v5h-5" />
                         </svg>
                     </button>
-                    <input
-                        type="color"
-                        id="linkColorPicker"
-                        title="Link Color"
-                        value="#4facfe"
-                        style="
-                            padding: 0;
-                            height: 28px;
-                            width: 28px;
-                            cursor: pointer;
-                            border: none;
-                            background: transparent;
                         "
                     />
+                    <button id="toggleTrianglesBtn" title="Show Rigid Triangles">
+                        <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <path d="M3 20h18L12 4z" />
+                        </svg>
+                    </button>
                 </div>
             </div>
         </div>
@@ -483,6 +485,7 @@
             let isPaused = false;
             let selectedIds = new Set();
             let selectedType = null; // 'joint', 'link'
+            let showTriangles = false;
             let clipboard = null;
             let undoStack = [];
             let marqueeActive = false;
@@ -668,6 +671,28 @@
                 return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
             }
 
+            function hexToRGBA(hex, alpha) {
+                if (hex.startsWith("rgba"))
+                    return hex.replace(/[\d.]+\)$/g, alpha + ")");
+                if (hex.startsWith("rgb"))
+                    return hex
+                        .replace("rgb", "rgba")
+                        .replace(")", ", " + alpha + ")");
+                let r = 0,
+                    g = 0,
+                    b = 0;
+                if (hex.length === 4) {
+                    r = parseInt(hex[1] + hex[1], 16);
+                    g = parseInt(hex[2] + hex[2], 16);
+                    b = parseInt(hex[3] + hex[3], 16);
+                } else if (hex.length === 7) {
+                    r = parseInt(hex.substring(1, 3), 16);
+                    g = parseInt(hex.substring(3, 5), 16);
+                    b = parseInt(hex.substring(5, 7), 16);
+                }
+                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            }
+
             function update() {
                 joints.forEach((j) => (j.isDriven = false));
 
@@ -732,6 +757,48 @@
 
             function draw() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (showTriangles) {
+                    const adj = new Map();
+                    joints.forEach((j) => adj.set(j.id, []));
+                    links.forEach((l) => {
+                        adj.get(l.a.id).push({ joint: l.b, link: l });
+                        adj.get(l.b.id).push({ joint: l.a, link: l });
+                    });
+
+                    const processed = new Set();
+                    links.forEach((l) => {
+                        const A = l.a;
+                        const B = l.b;
+                        const neighborsA = adj.get(A.id);
+                        const neighborsB = adj.get(B.id);
+
+                        neighborsA.forEach((n) => {
+                            const C = n.joint;
+                            if (C.id === B.id) return;
+                            const linkBC = neighborsB.find(
+                                (nb) => nb.joint.id === C.id,
+                            );
+                            if (linkBC) {
+                                const key = [A.id, B.id, C.id].sort().join("|");
+                                if (!processed.has(key)) {
+                                    processed.add(key);
+                                    ctx.beginPath();
+                                    ctx.moveTo(A.x, A.y);
+                                    ctx.lineTo(B.x, B.y);
+                                    ctx.lineTo(C.x, C.y);
+                                    ctx.closePath();
+                                    const baseColor =
+                                        l.color ||
+                                        (l.isCrank ? "#f5a623" : "#4facfe");
+                                    ctx.fillStyle = hexToRGBA(baseColor, 0.2);
+                                    ctx.fill();
+                                }
+                            }
+                        });
+                    });
+                }
+
                 ctx.strokeStyle = "#2a2a40";
                 ctx.lineWidth = 1;
                 for (let x = 0; x < canvas.width; x += 50) {
@@ -1446,6 +1513,15 @@
                     a.download = "mechanism.json";
                     a.click();
                     URL.revokeObjectURL(url);
+                });
+
+            document
+                .getElementById("toggleTrianglesBtn")
+                .addEventListener("click", (e) => {
+                    showTriangles = !showTriangles;
+                    const btn = document.getElementById("toggleTrianglesBtn");
+                    if (showTriangles) btn.classList.add("active");
+                    else btn.classList.remove("active");
                 });
 
             document
