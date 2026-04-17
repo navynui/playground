@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Neon Canvas Wallpaper Generator</title>
+        <style>
+            /* ------------------ */
+            /* CSS Styling */
+            /* ------------------ */
+            body {
+                margin: 0;
+                padding: 0;
+                background-color: #121212; /* Deep dark background */
+                overflow: hidden; /* Prevent scrollbars from canvas expansion */
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                width: 100vw;
+            }
+
+            #canvasContainer {
+                position: relative;
+                width: 100%;
+                height: 100%;
+            }
+
+            #artCanvas {
+                display: block;
+                /* The canvas will be sized by JS to fill the container */
+                background-color: #000000; /* Initial fallback color */
+            }
+
+            #controls {
+                position: absolute;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 10; /* Ensure controls are above the canvas art */
+                display: flex;
+                gap: 15px;
+            }
+
+            .control-button {
+                padding: 10px 25px;
+                border: none;
+                border-radius: 8px;
+                font-size: 1rem;
+                font-weight: bold;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 15px rgba(0, 255, 255, 0.2); /* Neon glow effect */
+            }
+
+            #generateBtn {
+                background-color: #1e1e1e; /* Dark background for the button itself */
+                color: #0ff; /* Cyan neon text */
+                border: 2px solid #0ff;
+            }
+
+            #generateBtn:hover {
+                background-color: rgba(0, 255, 255, 0.1);
+                box-shadow: 0 8px 25px rgba(0, 255, 255, 0.6);
+            }
+
+            #saveBtn {
+                background-color: #1e1e1e;
+                color: #ff44aa; /* Magenta neon text */
+                border: 2px solid #ff44aa;
+            }
+
+            #saveBtn:hover {
+                background-color: rgba(255, 68, 170, 0.1);
+                box-shadow: 0 8px 25px rgba(255, 68, 170, 0.6);
+            }
+
+            #home-link {
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                color: #0ff;
+                text-decoration: none;
+                padding: 10px 20px;
+                border: 2px solid #0ff;
+                border-radius: 8px;
+                font-weight: bold;
+                z-index: 10;
+                transition: all 0.3s ease;
+            }
+
+            #home-link:hover {
+                background: rgba(0, 255, 255, 0.1);
+                box-shadow: 0 4px 15px rgba(0, 255, 255, 0.4);
+            }
+        </style>
+    </head>
+    <body>
+        <div id="canvasContainer">
+            <canvas id="artCanvas"></canvas>
+
+            <div id="controls">
+                <button class="control-button" id="generateBtn">
+                    Generate New Art
+                </button>
+                <button class="control-button" id="saveBtn">
+                    Save Wallpaper (PNG)
+                </button>
+            </div>
+        </div>
+
+        <script>
+            // ------------------
+            // JavaScript Logic
+            // ------------------
+
+            const canvas = document.getElementById("artCanvas");
+            const ctx = canvas.getContext("2d");
+            const generateButton = document.getElementById("generateBtn");
+            const saveButton = document.getElementById("saveBtn");
+
+            let currentWidth = window.innerWidth;
+            let currentHeight = window.innerHeight;
+
+            // 1. Responsiveness Setup
+            function resizeCanvas() {
+                currentWidth = window.innerWidth;
+                currentHeight = window.innerHeight;
+                canvas.width = currentWidth;
+                canvas.height = currentHeight;
+                generateArt(); // Regenerate art on resize to fit new dimensions
+            }
+
+            window.addEventListener("resize", resizeCanvas);
+
+            // Utility function for random numbers and colors
+            const rand = (min, max) => Math.random() * (max - min) + min;
+
+            // Generates a vibrant, moody neon color
+            const getNeonColor = () => {
+                const hues = [
+                    "hsl(200, 100%, 70%)", // Cyan/Blue Neon
+                    "hsl(300, 100%, 60%)", // Magenta/Pink Neon
+                    "hsl(120, 100%, 50%)", // Green Neon
+                    "hsl(45, 100%, 60%)", // Yellow/Orange Neon
+                ];
+                return hues[Math.floor(Math.random() * hues.length)];
+            };
+
+            /**
+             * Core Art Generation Logic (Mixing curves and gradients)
+             */
+            function drawAbstractShape(
+                startX,
+                startY,
+                endX,
+                endY,
+                controlX1,
+                controlY1,
+                controlX2,
+                controlY2,
+                color,
+            ) {
+                ctx.save();
+                ctx.beginPath();
+                // Start the curve
+                ctx.moveTo(startX, startY);
+                // Use Bezier curve for smooth, fluid shapes
+                ctx.bezierCurveTo(
+                    controlX1,
+                    controlY1,
+                    controlX2,
+                    controlY2,
+                    endX,
+                    endY,
+                );
+
+                // Add a glow effect before drawing (simulating neon)
+                ctx.shadowBlur = rand(15, 30);
+                ctx.shadowColor = color;
+
+                // Draw the stroke path
+                ctx.strokeStyle = color;
+                ctx.lineWidth = rand(2, 8);
+                ctx.lineCap = "round";
+                ctx.stroke();
+
+                ctx.restore(); // Restore context to reset shadow/global settings
+            }
+
+            function generateArt() {
+                // Clear the canvas completely before drawing new art
+                ctx.clearRect(0, 0, currentWidth, currentHeight);
+
+                // Reset global styles
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = "#121212"; // Use dark background color from CSS
+                ctx.fillRect(0, 0, currentWidth, currentHeight);
+
+                // --- 1. Background Gradient / Atmosphere (Subtle effect) ---
+                const gradient = ctx.createRadialGradient(
+                    currentWidth * rand(0.3, 0.7), // Center X
+                    currentHeight * rand(0.3, 0.7), // Center Y
+                    rand(50, 150), // Inner radius
+                    currentWidth / 2,
+                    currentHeight / 2,
+                    Math.max(currentWidth, currentHeight) * 1.5,
+                );
+
+                // Darker center to lighter outer edge for depth
+                gradient.addColorStop(0, "rgba(30, 30, 30, 0.6)"); // Slightly lifted dark spot
+                gradient.addColorStop(0.8, "rgba(12, 12, 12, 0.9)"); // Deep black area
+                gradient.addColorStop(1, "rgba(12, 12, 12, 1)"); // Full coverage deep black
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, currentWidth, currentHeight);
+
+                // --- 2. Draw Multiple Complex Shapes (The main art) ---
+                const numberOfShapes = Math.floor(rand(6, 12));
+                for (let i = 0; i < numberOfShapes; i++) {
+                    const color = getNeonColor();
+
+                    // Random points defining the shape endpoints and controls
+                    const startX = rand(0, currentWidth);
+                    const startY = rand(0, currentHeight * 0.4); // Keep starts towards top/middle
+                    const endX = rand(0, currentWidth);
+                    const endY = rand(0, currentHeight);
+
+                    // Control points are critical for the curve shape
+                    const controlX1 = rand(0, currentWidth);
+                    const controlY1 = rand(0, currentHeight * 1.5);
+                    const controlX2 = rand(0, currentWidth);
+                    const controlY2 = rand(0, currentHeight * 1.5);
+
+                    drawAbstractShape(
+                        startX,
+                        startY,
+                        endX,
+                        endY,
+                        controlX1,
+                        controlY1,
+                        controlX2,
+                        controlY2,
+                        color,
+                    );
+                }
+
+                // --- 3. Add Geometric Overlays (Intersections / Dots) ---
+                const numberOfDots = Math.floor(rand(5, 10));
+                for (let i = 0; i < numberOfDots; i++) {
+                    ctx.beginPath();
+                    const dotX = rand(0, currentWidth);
+                    const dotY = rand(0, currentHeight);
+                    const size = rand(2, 6);
+
+                    // Glowing circle effect
+                    ctx.shadowBlur = rand(10, 25);
+                    ctx.shadowColor = getNeonColor();
+
+                    ctx.fillStyle = getNeonColor(); // Use neon color for the dot fill
+                    ctx.arc(dotX, dotY, size / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Reset global shadow after drawing all art
+                ctx.shadowBlur = 0;
+            }
+
+            /**
+             * Save Wallpaper Functionality
+             */
+            function saveWallpaper() {
+                const link = document.createElement("a");
+                // The canvas content is converted to a PNG data URL
+                link.download = "wallpaper_abstract.png";
+                link.href = canvas.toDataURL("image/png"); // Use PNG format for best quality
+                link.click();
+            }
+
+            // ------------------
+            // Initialization
+            // ------------------
+
+            // Event Listeners
+            generateButton.addEventListener("click", generateArt);
+            saveButton.addEventListener("click", saveWallpaper);
+
+            // Initial run when the page loads
+            resizeCanvas(); // Sets initial dimensions and draws the first piece of art
+        </script>
+        <a id="home-link" href="index.html">Home</a>
+    </body>
+</html>
