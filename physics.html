@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Physics Sandbox Simulation</title>
+    <style>
+        /* Set up full screen canvas and basic dark mode aesthetic */
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0a0a14; /* Deep space background */
+            touch-action: none; /* Prevent default touch scrolling/actions on the canvas */
+        }
+
+        #physicsCanvas {
+            display: block;
+            cursor: crosshair;
+        }
+
+        /* UI Overlay Styling */
+        #ui-overlay {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 255, 16, 0.3);
+            color: #39ff14; /* Neon green text */
+            z-index: 10;
+            font-family: monospace;
+        }
+
+        #ui-overlay h3 {
+            margin-top: 0;
+            border-bottom: 1px solid rgba(57, 255, 20, 0.4);
+            padding-bottom: 5px;
+        }
+
+        #resetButton {
+            background: var(--primary-accent);
+            color: #0a0a14;
+            border: none;
+            cursor: pointer;
+            padding: 8px 12px;
+            margin-top: 10px;
+            border-radius: 5px;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        #resetButton:hover {
+            background: #39ff14ee; /* Slightly darker neon */
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="physicsCanvas"></canvas>
+    
+    <div id="ui-overlay">
+        <h3>Sandbox Status</h3>
+        <div>Particle Count: <span id="particleCount">0</span></div>
+        <div>Avg Velocity: <span id="averageVelocity">0.00 px/frame</span></div>
+        <button id="resetButton">Reset Simulation</button>
+    </div>
+
+    <script>
+        // =========================
+        // CORE SIMULATION SETUP
+        // =========================
+
+        const canvas = document.getElementById('physicsCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let particles = [];
+        let mouse = { x: null, y: null, isDown: false };
+        const NUM_PARTICLES = 50;
+        const FRICTION_COEFFICIENT = 0.8;
+        const CONNECTION_DISTANCE = 100; // Pixels for line drawing
+
+        // Initialize particles array and simulation variables
+        let running = true;
+
+        /**
+         * Particle Class: Defines the physical properties of a particle node.
+         */
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                // Initial random velocity (drifting effect)
+                this.vx = Math.random() * 2 - 1; 
+                this.vy = Math.random() * 2 - 1;
+                this.radius = Math.random() * 4 + 3; // Size between 3px and 7px
+                this.color = `hsl(${Math.floor(Math.random() * 360)}, 80%, 70%)`;
+            }
+
+            /**
+             * Applies forces (gravity well, friction) to update velocity.
+             */
+            applyForces(mouseX, mouseY) {
+                // 1. GRAVITY WELL MECHANIC: Pull towards the mouse cursor
+                if (mouse.isDown && mouseX !== null && mouseY !== null) {
+                    
+                    // Calculate vector components from particle to mouse
+                    const dx = mouseX - this.x;
+                    const dy = mouseY - this.y;
+
+                    // Calculate squared distance (r^2)
+                    const distanceSquared = dx * dx + dy * dy;
+                    const distance = Math.sqrt(distanceSquared);
+
+                    // Inverse Square Law Implementation: Force magnitude is inversely proportional to the square of the distance.
+                    // The force decreases rapidly as distance increases. 
+                    let strength = 0;
+                    if (distance > 1) {
+                        strength = 150 / distanceSquared * 0.2; // Scaling constant for visible pull
+                    }
+
+                    // Calculate acceleration components based on the unit vector and strength
+                    // ax = F_magnitude * dx / r, ay = F_magnitude * dy / r
+                    this.vx += (dx / distance) * strength;
+                    this.vy += (dy / distance) * strength;
+                }
+            }
+
+            /**
+             * Updates position and handles boundary collision with friction.
+             */
+            update() {
+                // 1. Apply forces (updates velocity: vx, vy)
+                this.applyForces(mouse.x, mouse.y);
+
+                // Update Position using current velocity (Euler integration step)
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // 2. Boundary Collision & Friction: Check boundaries and bounce/dampen movement
+                let collided = false;
+
+                // Horizontal check
+                if (this.x - this.radius < 0 || this.x + this.radius > canvas.width) {
+                    this.vx *= -FRICTION_COEFFICIENT; // Reverse X velocity and apply friction
+                    this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x)); // Clamp position
+                    collided = true;
+                }
+
+                // Vertical check
+                if (this.y - this.radius < 0 || this.y + this.radius > canvas.height) {
+                    this.vy *= -FRICTION_COEFFICIENT; // Reverse Y velocity and apply friction
+                    this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y)); // Clamp position
+                    collided = true;
+                }
+
+                // Dampen overall movement slightly every frame (natural decay)
+                this.vx *= 0.985;
+                this.vy *= 0.985;
+
+                // If collision occurred, we might want to reduce velocity further
+                if(collided) {
+                    this.vx *= 0.9;
+                    this.vy *= 0.9;
+                }
+            }
+
+            /**
+             * Draws the particle and calculates its movement for rendering.
+             */
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+
+        // =========================
+        // RENDERING AND LOOP FUNCTIONS
+        // =========================
+
+        /**
+         * Calculates and draws connecting lines between nearby particles (Plexus effect).
+         */
+        function drawConnections() {
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const p1 = particles[i];
+                    const p2 = particles[j];
+
+                    // Calculate distance between two particles
+                    const dx = p1.x - p2.x;
+                    const dy = p1.y - p2.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < CONNECTION_DISTANCE) {
+                        // Line opacity increases as particles get closer
+                        let alpha = 1 - (distance / CONNECTION_DISTANCE);
+                        alpha = Math.min(0.8, Math.max(0.1, alpha)); // Clamp alpha between 0.1 and 0.8
+
+                        ctx.strokeStyle = `rgba(57, 255, 20, ${alpha})`;
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.moveTo(p1.x, p1.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        /**
+         * The main animation loop, running at 60 FPS using requestAnimationFrame.
+         */
+        function animate() {
+            if (!running) return;
+
+            // 1. Clear the canvas (Redrawing background each frame is key to animation)
+            ctx.fillStyle = 'rgba(10, 10, 20, 0.5)'; // Semi-transparent fill for trail effect
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            let totalVelocityX = 0;
+            let totalVelocityY = 0;
+            let count = particles.length;
+
+            // 2. Update and Draw Particles
+            for (const p of particles) {
+                p.update();
+                p.draw();
+                
+                totalVelocityX += Math.abs(p.vx);
+                totalVelocityY += Math.abs(p.vy);
+            }
+
+            // 3. Draw connections over the drawn particles for visual effect
+            drawConnections();
+
+            // Update UI statistics after all updates are done
+            const averageVelocity = totalVelocityX + totalVelocityY / count; // Simplified average for display
+            document.getElementById('particleCount').textContent = count;
+            document.getElementById('averageVelocity').textContent = `${Math.sqrt(totalVelocityX * totalVelocityX + totalVelocityY * totalVelocityY) / count.toFixed(2)} px/frame`;
+
+            // Loop continuation
+            requestAnimationFrame(animate);
+        }
+
+
+        /**
+         * Initializes or resets the particle system and event listeners.
+         */
+        function setupSimulation() {
+            particles = [];
+            for (let i = 0; i < NUM_PARTICLES; i++) {
+                // Spawn particles randomly across the canvas area
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                particles.push(new Particle(x, y));
+            }
+
+            // Start the animation loop if it wasn't running
+            if (!running) {
+                 requestAnimationFrame(animate);
+            }
+        }
+
+        /**
+         * Handles resizing of the window to keep canvas full screen.
+         */
+        function handleResize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        // =========================
+        // EVENT HANDLERS AND INITIALIZATION
+        // =========================
+
+        /**
+         * Global mouse move handler for the Gravity Well effect.
+         */
+        window.addEventListener('mousemove', (event) => {
+            mouse.x = event.clientX;
+            mouse.y = event.clientY;
+        });
+
+        /**
+         * Mouse down handler: Activates gravity pull when button is pressed.
+         */
+        window.addEventListener('mousedown', () => {
+            mouse.isDown = true;
+            // Prevent default browser actions like text selection
+            canvas.style.cursor = 'pointer'; 
+        });
+
+        /**
+         * Mouse up handler: Deactivates gravity pull when button is released.
+         */
+        window.addEventListener('mouseup', () => {
+            mouse.isDown = false;
+            canvas.style.cursor = 'crosshair';
+        });
+        
+        // Handle touch events for mobile compatibility (treating touch down as mousedown)
+        ['touchstart', 'touchmove', 'touchend'].forEach(event => {
+             window.addEventListener(event, (e) => {
+                if (event === 'touchstart') {
+                    mouse.isDown = true;
+                    // Use the first touch point for coordinates
+                    const touches = e.touches || e.changedTouches;
+                    if (touches.length > 0) {
+                        mouse.x = touches[0].clientX;
+                        mouse.y = touches[0].clientY;
+                    }
+                } else if (event === 'touchmove') {
+                     const touches = e.touches || e.changedTouches;
+                      if (touches.length > 0) {
+                          mouse.x = touches[0].clientX;
+                          mouse.y = touches[0].clientY;
+                      }
+                } else if (event === 'touchend') {
+                    mouse.isDown = false;
+                }
+            });
+        });
+
+
+        // Initialization calls
+        window.addEventListener('resize', handleResize);
+        document.getElementById('resetButton').addEventListener('click', () => {
+            setupSimulation();
+        });
+
+        handleResize(); // Initial size setup
+        setupSimulation(); // Start the simulation and event listeners
+
+    </script>
+
+</body>
+</html>

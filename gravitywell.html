@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Physics Sandbox</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0a0a0a;
+            font-family: sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0a0a0a;
+            font-family: sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        /* Container for top-left stats (Particle count, velocity) */
+        #stats-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            pointer-events: none;
+            user-select: none;
+        }
+        /* Container for top-right home link */
+        #home-link-container {
+            position: absolute;
+            top: 10px;
+            right: 10px; /* Positioned on the right side */
+        }
+        .controls button, .controls a { /* Shared styling for buttons/links in controls div */
+            pointer-events: auto;
+            cursor: pointer;
+            padding: 8px 12px;
+            background: #444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .controls button:hover, .controls a:hover {
+            background: #666;
+        }
+        #ui-overlay div {
+            margin-bottom: 5px;
+        }
+        .controls button, .controls a { /* Group buttons/links for common styling */
+            pointer-events: auto;
+            cursor: pointer;
+            padding: 8px 12px;
+            background: #444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .controls button:hover, .controls a:hover {
+            background: #666;
+        }
+    </style>
+</head>
+<body>
+
+<div id="stats-overlay">
+    <div>Particles: <span id="count">0</span></div>
+    <div>Avg Velocity: <span id="avg-vel">0</span></div>
+    <div class="controls">
+        <button id="reset-btn">Reset</button>
+    </div>
+</div>
+
+<div id="home-link-container">
+    <button id="home-link-btn" class="control-btn" onclick="window.location.href='index.html'">Home</button>
+</div>
+
+<canvas id="sandbox"></canvas>
+
+<script>
+    const canvas = document.getElementById('sandbox');
+    const ctx = canvas.getContext('2d');
+    const countEl = document.getElementById('count');
+    const avgVelEl = document.getElementById('avg-vel');
+    const resetBtn = document.getElementById('reset-btn');
+
+    let particles = [];
+    const particleCount = 50;
+    const friction = 0.8;
+    const gravityStrength = 1000; // Scale factor for the inverse square law
+    const connectionDist = 100;
+
+    let mouse = { x: -1000, y: -1000, active: false };
+
+    class Particle {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.vx = (Math.random() - 0.5) * 2;
+            this.vy = (Math.random() - 0.5) * 2;
+            this.radius = 3 + Math.random() * 3;
+        }
+
+        update() {
+            // Apply Gravity Well logic
+            if (mouse.active) {
+                /**
+                 * Vector Math for Gravity Pull:
+                 * 1. Calculate the displacement vector from particle to mouse: (dx, dy)
+                 * 2. Calculate distance squared (distSq = dx^2 + dy^s) to implement Inverse Square Law
+                 * 3. Force magnitude is proportional to 1 / distSq
+                 * 4. Acceleration direction is along the normalized displacement vector
+                 */
+                const dx = mouse.x - this.x;
+                const dy = mouse.y - this.y;
+                const distSq = dx * dx + dy * dy;
+                const dist = Math.sqrt(distSq);
+
+                if (dist > 1) { // Avoid division by zero/extreme forces
+                    const force = gravityStrength / distSq;
+                    this.vx += (dx / dist) * force;
+                    this.vy += (dy / dist) * force;
+                }
+            }
+
+            // Movement
+            this.x += this.vx;
+            this.y += this.vy;
+
+            // Boundary Collision with Friction
+            if (this.x - this.radius < 0) {
+                this.x = this.radius;
+                this.vx *= -friction;
+            } else if (this.x + this.radius > canvas.width) {
+                this.x = canvas.width - this.radius;
+                this.vx *= -friction;
+            }
+
+            if (this.y - this.radius < 0) {
+                this.y = this.radius;
+                this.vy *= -friction;
+            } else if (this.y + this.radius > canvas.height) {
+                this.y = canvas.height - this.radius;
+                this.vy *= -friction;
+            }
+
+            // Slow down particles naturally to prevent infinite acceleration
+            this.vx *= 0.995;
+            this.vy *= 0.995;
+        }
+
+        draw() {
+            const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+            // Map speed (approx 0 to 10) to hue (240 for blue, 0 for red)
+            const hue = Math.max(0, 240 * (1 - speed / 10));
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+            ctx.fill();
+        }
+    }
+
+    function init() {
+        particles = [];
+        for (let i = 0; i < particleCount; i++) {
+            particles.push(new Particle(Math.random() * canvas.width, Math.random() * canvas.height));
+        }
+        countEl.textContent = particles.length;
+    }
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Gravity Well Indicator
+        if (mouse.active) {
+            const gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 150);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(mouse.x, mouse.y, 150, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        let totalVel = 0;
+
+        // Draw Connections (Constellation effect)
+        for (let i = 0; i < particles.length; i++) {
+            for (let j = i + 1; j < particles.length; j++) {
+                const dx = particles[i].x - particles[j].x;
+                const dy = particles[i].y - particles[j].y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < connectionDist) {
+                    // Calculate hue for both based on speed
+                    const speedI = Math.sqrt(particles[i].vx ** 2 + particles[i].vy ** 2);
+                    const hueI = Math.max(0, 240 * (1 - speedI / 10));
+                    const speedJ = Math.sqrt(particles[j].vx ** 2 + particles[j].vy ** 2);
+                    const hueJ = Math.max(0, 240 * (1 - speedJ / 10));
+                    
+                    const avgHue = (hueI + hueJ) / 2;
+
+                    ctx.beginPath();
+                    ctx.lineWidth = 1;
+                    // Opacity increases as distance decreases
+                    ctx.strokeStyle = `hsla(${avgHue}, 100%, 50%, ${1 - dist / connectionDist})`;
+                    ctx.moveTo(particles[i].x, particles[i].y);
+                    ctx.lineTo(particles[j].x, particles[j].y);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // Update and Draw Particles
+        particles.forEach(p => {
+            p.update();
+            p.draw();
+            totalVel += Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+        });
+
+        avgVelEl.textContent = (totalVel / particles.length).toFixed(2);
+
+        requestAnimationFrame(animate);
+    }
+
+    // Event Listeners
+    window.addEventListener('resize', resize);
+    
+    canvas.addEventListener('mousedown', (e) => {
+        mouse.active = true;
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+    });
+
+    window.addEventListener('mouseup', () => {
+        mouse.active = false;
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+    });
+
+    resetBtn.addEventListener('click', init);
+
+    // Start
+    resize();
+    init();
+    animate();
+
+</script>
+</body>
+</html>
