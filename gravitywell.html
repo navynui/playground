@@ -58,18 +58,54 @@
         #ui-overlay div {
             margin-bottom: 5px;
         }
-        .controls button, .controls a { /* Group buttons/links for common styling */
-            pointer-events: auto;
-            cursor: pointer;
-            padding: 8px 12px;
-            background: #444;
+        /* Parameter Panel Styling */
+        #settings-panel {
+            position: absolute;
+            top: 60px;
+            right: 10px;
+            width: 250px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.7);
             color: white;
-            border: none;
-            border-radius: 4px;
-            transition: background 0.2s;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 14px;
+            z-index: 100;
         }
-        .controls button:hover, .controls a:hover {
-            background: #666;
+        .param-group {
+            margin-bottom: 15px;
+        }
+        .param-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #aaa;
+        }
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .control-row input[type="range"] {
+            flex: 1;
+            cursor: pointer;
+        }
+        .control-row input[type="number"] {
+            width: 60px;
+            background: #222;
+            border: 1px solid #444;
+            color: white;
+            padding: 4px;
+            border-radius: 4px;
+        }
+        #save-btn {
+            width: 100%;
+            margin-top: 10px;
+            background: #28a745;
+        }
+        #save-btn:hover {
+            background: #218838;
         }
     </style>
 </head>
@@ -87,6 +123,45 @@
     <button id="home-link-btn" class="control-btn" onclick="window.location.href='index.html'">Home</button>
 </div>
 
+<div id="settings-panel">
+    <div class="param-group">
+        <label>Gravity Strength</label>
+        <div class="control-row">
+            <input type="range" id="gravityStrength-slider" min="0" max="5000" step="100">
+            <input type="number" id="gravityStrength-num">
+        </div>
+    </div>
+    <div class="param-group">
+        <label>Gravity Well Radius</label>
+        <div class="control-row">
+            <input type="range" id="gravityRadius-slider" min="10" max="500" step="10">
+            <input type="number" id="gravityRadius-num">
+        </div>
+    </div>
+    <div class="param-group">
+        <label>Friction (Bounciness)</label>
+        <div class="control-row">
+            <input type="range" id="friction-slider" min="0" max="1" step="0.05">
+            <input type="number" id="friction-num" step="0.05">
+        </div>
+    </div>
+    <div class="param-group">
+        <label>Air Damping</label>
+        <div class="control-row">
+            <input type="range" id="airDamping-slider" min="0.9" max="1" step="0.001">
+            <input type="number" id="airDamping-num" step="0.001">
+        </div>
+    </div>
+    <div class="param-group">
+        <label>Particle Size</label>
+        <div class="control-row">
+            <input type="range" id="particleSize-slider" min="1" max="20" step="0.5">
+            <input type="number" id="particleSize-num" step="0.5">
+        </div>
+    </div>
+    <button id="save-btn" class="control-btn">Save Settings</button>
+</div>
+
 <canvas id="sandbox"></canvas>
 
 <script>
@@ -97,12 +172,29 @@
     const resetBtn = document.getElementById('reset-btn');
 
     let particles = [];
-    const particleCount = 50;
-    const friction = 0.8;
-    const gravityStrength = 1000; // Scale factor for the inverse square law
-    const connectionDist = 100;
+    
+    // Configurable Parameters (Default values)
+    let settings = {
+        particleCount: 50,
+        friction: 0.8,
+        gravityStrength: 1000,
+        gravityRadius: 150,
+        airDamping: 0.995,
+        particleSize: 3,
+        connectionDist: 100
+    };
 
     let mouse = { x: -1000, y: -1000, active: false };
+
+    // DOM Elements for controls
+    const controls = {
+        gravityStrength: { slider: document.getElementById('gravityStrength-slider'), num: document.getElementById('gravityStrength-num') },
+        gravityRadius: { slider: document.getElementById('gravityRadius-slider'), num: document.getElementById('gravityRadius-num') },
+        friction: { slider: document.getElementById('friction-slider'), num: document.getElementById('friction-num') },
+        airDamping: { slider: document.getElementById('airDamping-slider'), num: document.getElementById('airDamping-num') },
+        particleSize: { slider: document.getElementById('particleSize-slider'), num: document.getElementById('particleSize-num') },
+        saveBtn: document.getElementById('save-btn')
+    };
 
     class Particle {
         constructor(x, y) {
@@ -110,7 +202,11 @@
             this.y = y;
             this.vx = (Math.random() - 0.5) * 2;
             this.vy = (Math.random() - 0.5) * 2;
-            this.radius = 3 + Math.random() * 3;
+            this.updateRadius();
+        }
+
+        updateRadius() {
+            this.radius = settings.particleSize + Math.random() * settings.particleSize;
         }
 
         update() {
@@ -129,7 +225,7 @@
                 const dist = Math.sqrt(distSq);
 
                 if (dist > 1) { // Avoid division by zero/extreme forces
-                    const force = gravityStrength / distSq;
+                    const force = settings.gravityStrength / distSq;
                     this.vx += (dx / dist) * force;
                     this.vy += (dy / dist) * force;
                 }
@@ -142,23 +238,23 @@
             // Boundary Collision with Friction
             if (this.x - this.radius < 0) {
                 this.x = this.radius;
-                this.vx *= -friction;
+                this.vx *= -settings.friction;
             } else if (this.x + this.radius > canvas.width) {
                 this.x = canvas.width - this.radius;
-                this.vx *= -friction;
+                this.vx *= -settings.friction;
             }
 
             if (this.y - this.radius < 0) {
                 this.y = this.radius;
-                this.vy *= -friction;
+                this.vy *= -settings.friction;
             } else if (this.y + this.radius > canvas.height) {
                 this.y = canvas.height - this.radius;
-                this.vy *= -friction;
+                this.vy *= -settings.friction;
             }
 
             // Slow down particles naturally to prevent infinite acceleration
-            this.vx *= 0.995;
-            this.vy *= 0.995;
+            this.vx *= settings.airDamping;
+            this.vy *= settings.airDamping;
         }
 
         draw() {
@@ -174,7 +270,7 @@
 
     function init() {
         particles = [];
-        for (let i = 0; i < particleCount; i++) {
+        for (let i = 0; i < settings.particleCount; i++) {
             particles.push(new Particle(Math.random() * canvas.width, Math.random() * canvas.height));
         }
         countEl.textContent = particles.length;
@@ -190,12 +286,12 @@
 
         // Draw Gravity Well Indicator
         if (mouse.active) {
-            const gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 150);
+            const gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, settings.gravityRadius);
             gradient.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
             gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
             ctx.fillStyle = gradient;
             ctx.beginPath();
-            ctx.arc(mouse.x, mouse.y, 150, 0, Math.PI * 2);
+            ctx.arc(mouse.x, mouse.y, settings.gravityRadius, 0, Math.PI * 2);
             ctx.fill();
         }
 
@@ -208,7 +304,7 @@
                 const dy = particles[i].y - particles[j].y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
-                if (dist < connectionDist) {
+                if (dist < settings.connectionDist) {
                     // Calculate hue for both based on speed
                     const speedI = Math.sqrt(particles[i].vx ** 2 + particles[i].vy ** 2);
                     const hueI = Math.max(0, 240 * (1 - speedI / 10));
@@ -220,7 +316,7 @@
                     ctx.beginPath();
                     ctx.lineWidth = 1;
                     // Opacity increases as distance decreases
-                    ctx.strokeStyle = `hsla(${avgHue}, 100%, 50%, ${1 - dist / connectionDist})`;
+                    ctx.strokeStyle = `hsla(${avgHue}, 100%, 50%, ${1 - dist / settings.connectionDist})`;
                     ctx.moveTo(particles[i].x, particles[i].y);
                     ctx.lineTo(particles[j].x, particles[j].y);
                     ctx.stroke();
@@ -260,8 +356,70 @@
 
     resetBtn.addEventListener('click', init);
 
+    // Settings Management
+    function updateUI() {
+        for (const key in controls) {
+            if (controls[key].slider) {
+                controls[key].slider.value = settings[key];
+                controls[key].num.value = settings[key];
+            }
+        }
+    }
+
+    function syncControls(key, source) {
+        const val = parseFloat(source.value);
+        settings[key] = val;
+        
+        if (source === controls[key].slider) {
+            controls[key].num.value = val;
+        } else {
+            controls[key].slider.value = val;
+        }
+
+        // Handle specific logic for certain settings
+        if (key === 'particleSize') {
+            particles.forEach(p => p.updateRadius());
+        }
+    }
+
+    function saveSettings() {
+        localStorage.setItem('gravityWellSettings', JSON.stringify(settings));
+        const originalText = controls.saveBtn.textContent;
+        controls.saveBtn.textContent = 'Saved!';
+        controls.saveBtn.style.background = '#1e7e34';
+        setTimeout(() => {
+            controls.saveBtn.textContent = originalText;
+            controls.saveBtn.style.background = '';
+        }, 1500);
+    }
+
+    function loadSettings() {
+        const saved = localStorage.getItem('gravityWellSettings');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                settings = { ...settings, ...parsed };
+                updateUI();
+            } catch (e) {
+                console.error("Error loading settings", e);
+            }
+        }
+    }
+
+    // Attach listeners to all sliders and number inputs
+    for (const key in controls) {
+        if (controls[key].slider) {
+            controls[key].slider.addEventListener('input', () => syncControls(key, controls[key].slider));
+            controls[key].num.addEventListener('input', () => syncControls(key, controls[key].num));
+        }
+    }
+
+    controls.saveBtn.addEventListener('click', saveSettings);
+
     // Start
     resize();
+    loadSettings();
+    updateUI();
     init();
     animate();
 
