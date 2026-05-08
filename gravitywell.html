@@ -14,15 +14,6 @@
         canvas {
             display: block;
         }
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #0a0a0a;
-            font-family: sans-serif;
-        }
-        canvas {
-            display: block;
-        }
         /* Container for top-left stats (Particle count, velocity) */
         #stats-overlay {
             position: absolute;
@@ -36,13 +27,15 @@
             pointer-events: none;
             user-select: none;
         }
-        /* Container for top-right home link */
+        /* Container for top-right controls */
         #home-link-container {
             position: absolute;
             top: 10px;
             right: 10px; /* Positioned on the right side */
+            display: flex;
+            gap: 10px;
         }
-        .controls button, .controls a { /* Shared styling for buttons/links in controls div */
+        .controls button, .controls a, .control-btn { /* Shared styling for buttons/links in controls div and control-btn class */
             pointer-events: auto;
             cursor: pointer;
             padding: 8px 12px;
@@ -107,6 +100,11 @@
         #save-btn:hover {
             background: #218838;
         }
+        /* Hide UI elements when toggled */
+        .ui-hidden #stats-overlay,
+        .ui-hidden #settings-panel {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -121,6 +119,7 @@
 
 <div id="home-link-container">
     <button id="home-link-btn" class="control-btn" onclick="window.location.href='index.html'">Home</button>
+    <button id="toggle-ui-btn" class="control-btn">Toggle UI</button>
 </div>
 
 <div id="settings-panel">
@@ -159,6 +158,12 @@
             <input type="number" id="particleSize-num" step="0.5">
         </div>
     </div>
+    <div class="param-group">
+        <label>Particle Collisions</label>
+        <div class="control-row">
+            <input type="checkbox" id="collisions-toggle">
+        </div>
+    </div>
     <button id="save-btn" class="control-btn">Save Settings</button>
 </div>
 
@@ -181,7 +186,8 @@
         gravityRadius: 150,
         airDamping: 0.995,
         particleSize: 3,
-        connectionDist: 100
+        connectionDist: 100,
+        collisions: false // Added collisions setting
     };
 
     let mouse = { x: -1000, y: -1000, active: false };
@@ -193,6 +199,7 @@
         friction: { slider: document.getElementById('friction-slider'), num: document.getElementById('friction-num') },
         airDamping: { slider: document.getElementById('airDamping-slider'), num: document.getElementById('airDamping-num') },
         particleSize: { slider: document.getElementById('particleSize-slider'), num: document.getElementById('particleSize-num') },
+        collisions: { toggle: document.getElementById('collisions-toggle') }, // Added collisions control
         saveBtn: document.getElementById('save-btn')
     };
 
@@ -331,6 +338,55 @@
             totalVel += Math.sqrt(p.vx * p.vx + p.vy * p.vy);
         });
 
+        // Particle-to-particle collisions
+        if (settings.collisions) {
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const p1 = particles[i];
+                    const p2 = particles[j];
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    const minDistance = p1.radius + p2.radius;
+
+                    if (distanceSq < minDistance * minDistance) {
+                        const distance = Math.sqrt(distanceSq);
+                        if (distance === 0) continue;
+
+                        // 1. Resolve overlap (static resolution)
+                        const overlap = minDistance - distance;
+                        const nx = dx / distance; 
+                        const ny = dy / distance; 
+                        
+                        const moveX = nx * overlap / 2;
+                        const moveY = ny * overlap / 2;
+
+                        p1.x -= moveX;
+                        p1.y -= moveY;
+                        p2.x += moveX;
+                        p2.y += moveY;
+
+                        // 2. Resolve velocity (dynamic resolution)
+                        const v1n = p1.vx * nx + p1.vy * ny;
+                        const v2n = p2.vx * nx + p2.vy * ny;
+
+                        if (v1n - v2n > 0) {
+                            const m1 = p1.radius * p1.radius;
+                            const m2 = p2.radius * p2.radius;
+                            const e = settings.friction; 
+                            
+                            const impulse = (-(1 + e) * (v1n - v2n)) / (1/m1 + 1/m2);
+                            
+                            p1.vx += (impulse / m1) * nx;
+                            p1.vy += (impulse / m1) * ny;
+                            p2.vx -= (impulse / m2) * nx;
+                            p2.vy -= (impulse / m2) * ny;
+                        }
+                    }
+                }
+            }
+        }
+
         avgVelEl.textContent = (totalVel / particles.length).toFixed(2);
 
         requestAnimationFrame(animate);
@@ -356,23 +412,38 @@
 
     resetBtn.addEventListener('click', init);
 
+    const toggleUiBtn = document.getElementById('toggle-ui-btn');
+    if (toggleUiBtn) {
+        toggleUiBtn.addEventListener('click', () => {
+            document.body.classList.toggle('ui-hidden');
+        });
+    }
+
     // Settings Management
     function updateUI() {
         for (const key in controls) {
             if (controls[key].slider) {
                 controls[key].slider.value = settings[key];
                 controls[key].num.value = settings[key];
+            } else if (controls[key].toggle) {
+                controls[key].toggle.checked = settings[key];
             }
         }
     }
 
     function syncControls(key, source) {
-        const val = parseFloat(source.value);
+        let val;
+        if (source.type === 'checkbox') {
+            val = source.checked;
+        } else {
+            val = parseFloat(source.value);
+        }
+        
         settings[key] = val;
         
-        if (source === controls[key].slider) {
+        if (controls[key].slider) {
             controls[key].num.value = val;
-        } else {
+        } else if (controls[key].num) {
             controls[key].slider.value = val;
         }
 
@@ -411,6 +482,8 @@
         if (controls[key].slider) {
             controls[key].slider.addEventListener('input', () => syncControls(key, controls[key].slider));
             controls[key].num.addEventListener('input', () => syncControls(key, controls[key].num));
+        } else if (controls[key].toggle) {
+            controls[key].toggle.addEventListener('change', () => syncControls(key, controls[key].toggle));
         }
     }
 

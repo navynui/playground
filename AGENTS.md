@@ -25,3 +25,7 @@ Flat playground of standalone HTML canvas games. No build step, no dependencies,
 
 - `marble.html` uses `localStorage` for persisting state
 - No linting, testing, or typecheck commands exist
+
+## AI Coding Preferences
+
+- **Incremental Updates**: When working on large files or complex logic, update the code in small, manageable chunks. This prevents hitting the context window limit and ensures that progress is saved incrementally to the file, reducing the risk of losing work if a large update fails.
